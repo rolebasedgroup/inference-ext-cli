@@ -47,7 +47,7 @@ docker push <your-registry>/rbgs-auto-benchmark:<tag>
 ### Dashboard UI Image
 
 ```bash
-cd ui/benchmark-viewer
+cd ui/auto-benchmark-dashboard
 docker build -t <your-registry>/rbgs-ab-dashboard:<tag> .
 docker push <your-registry>/rbgs-ab-dashboard:<tag>
 ```

@@ -1,6 +1,6 @@
 module sigs.k8s.io/rbgs/cli
 
-go 1.26.1
+go 1.26.0
 
 require (
 	github.com/chzyer/readline v1.5.1
