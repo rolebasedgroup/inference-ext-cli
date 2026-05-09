@@ -1,5 +1,5 @@
 # Build the benchmark-dashboard binary
-FROM golang:1.24 as builder
+FROM golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -18,7 +18,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy the source code
-COPY cmd/cli/cmd/benchmark-dashboard/ ./dashboard/
+COPY ./ui/benchmark ./dashboard/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \

@@ -3,11 +3,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies (layer caching)
-COPY package.json package-lock.json ./
+COPY ./ui/auto-benchmark/package.json ./ui/auto-benchmark/package-lock.json ./
 RUN npm ci
 
 # Build
-COPY . .
+COPY ./ui/auto-benchmark .
 RUN npm run build
 
 # Stage 2: nginx serve

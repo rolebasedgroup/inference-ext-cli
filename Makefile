@@ -1,10 +1,12 @@
 # Image URL to use all building/pushing image targets
 IMG_REPO ?= rolebasedgroup
-AUTOBENCHMARK_IMG ?= ${IMG_REPO}/rbgs-autobenchmark
-DASHBOARD_IMG     ?= ${IMG_REPO}/rbgs-benchmark-dashboard
+AUTOBENCHMARK_IMG  ?= ${IMG_REPO}/rbgs-autobenchmark
+DASHBOARD_IMG      ?= ${IMG_REPO}/rbgs-benchmark-dashboard
+AUTOBENCHMARK_UI_IMG   ?= ${IMG_REPO}/rbgs-autobenchmark-dashboard
 
-AUTOBENCHMARK_DOCKERFILE ?= cmd/autobenchmark/Dockerfile
-DASHBOARD_DOCKERFILE     ?= cmd/benchmark-dashboard/Dockerfile
+AUTOBENCHMARK_DOCKERFILE  ?= docker/autobenchmark-ctl.Dockerfile
+DASHBOARD_DOCKERFILE      ?= docker/benchmark-dashboard.Dockerfile 
+BENCHMARK_UI_DOCKERFILE   ?= docker/autobenchmark-dashboard.Dockerfile
 
 VERSION ?= v0.7.0
 GIT_SHA ?= $(shell git rev-parse --short HEAD || echo "HEAD")
@@ -39,9 +41,12 @@ GIT_COMMIT=$(shell git rev-parse HEAD)
 BUILD_DATE=$(shell date +%Y-%m-%dT%H:%M:%S%z)
 ldflags="-s -w -X $(VERSION_PKG).Version=$(TAG) -X $(VERSION_PKG).GitCommit=${GIT_COMMIT} -X ${VERSION_PKG}.BuildDate=${BUILD_DATE}"
 
-# Cross-compilation variables
-TARGETOS   ?= $(shell go env GOOS)
-TARGETARCH ?= $(shell go env GOARCH)
+DOCKER_BUILD_ARGS := \
+	--build-arg GOPROXY=$(GOPROXY) \
+	--build-arg GOPRIVATE=$(GOPRIVATE) \
+	--build-arg GOSUMDB=$(GOSUMDB) \
+	$(if $(TARGETARCH),--build-arg TARGETARCH=$(TARGETARCH)) \
+	$(if $(TARGETOS),--build-arg TARGETOS=$(TARGETOS))
 
 .PHONY: all
 all: build-cli
@@ -74,8 +79,8 @@ build-cli-all: ## Build CLI binaries for all platforms.
 		echo "Built bin/llmctl-$${platform%%/*}-$${platform##*/}"; \
 	done
 
-.PHONY: build-autobenchmark
-build-autobenchmark: ## Build autobenchmark controller binary.
+.PHONY: build-autobenchmark-ctl
+build-autobenchmark-ctl: ## Build autobenchmark controller binary.
 	GOARCH=${TARGETARCH} \
 	GOOS=${TARGETOS} \
 	CGO_ENABLED=0 \
@@ -83,17 +88,17 @@ build-autobenchmark: ## Build autobenchmark controller binary.
 	GOPROXY=${GOPROXY} \
 	$(GO_CMD) build -v -o bin/autobenchmark -ldflags $(ldflags) ./cmd/autobenchmark/
 
-.PHONY: build-dashboard
-build-dashboard: ## Build benchmark dashboard binary.
+.PHONY: build-benchmark-dashboard
+build-benchmark-dashboard: ## Build benchmark dashboard binary.
 	GOARCH=${TARGETARCH} \
 	GOOS=${TARGETOS} \
 	CGO_ENABLED=0 \
 	GO111MODULE=on \
 	GOPROXY=${GOPROXY} \
-	$(GO_CMD) build -v -o bin/dashboard -ldflags $(ldflags) ./cmd/benchmark-dashboard/
+	$(GO_CMD) build -v -o bin/dashboard -ldflags $(ldflags) ./ui/benchmark/
 
 .PHONY: build-all
-build-all: build-cli build-autobenchmark build-dashboard ## Build all binaries.
+build-all: build-cli build-autobenchmark-ctl build-benchmark-dashboard ## Build all binaries.
 
 .PHONY: install
 install: build-cli ## Install llmctl to GOPATH/bin.
@@ -147,27 +152,35 @@ DOCKER_BUILD_ARGS := \
 	$(if $(TARGETARCH),--build-arg TARGETARCH=$(TARGETARCH)) \
 	$(if $(TARGETOS),--build-arg TARGETOS=$(TARGETOS))
 
-.PHONY: docker-build-autobenchmark
-docker-build-autobenchmark: ## Build autobenchmark Docker image.
-	$(CONTAINER_TOOL) build -f ${AUTOBENCHMARK_DOCKERFILE} -t ${AUTOBENCHMARK_IMG}:${TAG} $(DOCKER_BUILD_ARGS) .
+.PHONY: docker-build-autobenchmark-ctl
+docker-build-autobenchmark-ctl: ## Build autobenchmark Docker image.
+	$(CONTAINER_TOOL) build -f ${AUTOBENCHMARK_DOCKERFILE} --platform linux/amd64 -t ${AUTOBENCHMARK_IMG}:${TAG} $(DOCKER_BUILD_ARGS) .
 
-.PHONY: docker-build-dashboard
-docker-build-dashboard: ## Build dashboard Docker image.
-	$(CONTAINER_TOOL) build -f ${DASHBOARD_DOCKERFILE} -t ${DASHBOARD_IMG}:${TAG} $(DOCKER_BUILD_ARGS) .
+.PHONY: docker-build-benchmark-dashboard
+docker-build-benchmark-dashboard: ## Build dashboard Docker image.
+	$(CONTAINER_TOOL) build -f ${DASHBOARD_DOCKERFILE} --platform linux/amd64 -t ${DASHBOARD_IMG}:${TAG} $(DOCKER_BUILD_ARGS) .
+
+.PHONY: docker-build-autobenchmark-dashboard
+docker-build-autobenchmark-dashboard: ## Build benchmark-viewer UI Docker image.
+	$(CONTAINER_TOOL) build -f ${BENCHMARK_UI_DOCKERFILE} --platform linux/amd64 -t ${AUTOBENCHMARK_UI_IMG}:${TAG} .
 
 .PHONY: docker-build
-docker-build: docker-build-autobenchmark docker-build-dashboard ## Build all Docker images.
+docker-build: docker-build-autobenchmark-ctl docker-build-benchmark-dashboard docker-build-autobenchmark-dashboard ## Build all Docker images.
 
 .PHONY: docker-push-autobenchmark
 docker-push-autobenchmark: ## Push autobenchmark Docker image.
 	$(CONTAINER_TOOL) push ${AUTOBENCHMARK_IMG}:${TAG}
 
-.PHONY: docker-push-dashboard
-docker-push-dashboard: ## Push dashboard Docker image.
+.PHONY: docker-push-benchmark-dashboard
+docker-push-benchmark-dashboard: ## Push dashboard Docker image.
 	$(CONTAINER_TOOL) push ${DASHBOARD_IMG}:${TAG}
 
+.PHONY: docker-push-autobenchmark-dashboard
+docker-push-autobenchmark-dashboard: ## Push benchmark-viewer UI Docker image.
+	$(CONTAINER_TOOL) push ${AUTOBENCHMARK_UI_IMG}:${TAG}
+
 .PHONY: docker-push
-docker-push: docker-push-autobenchmark docker-push-dashboard ## Push all Docker images.
+docker-push: docker-push-autobenchmark docker-push-benchmark-dashboard docker-push-autobenchmark-dashboard ## Push all Docker images.
 
 # Multi-platform Docker builds using buildx
 PLATFORMS ?= linux/amd64,linux/arm64
@@ -179,15 +192,22 @@ docker-buildx-autobenchmark: ## Build and push multi-arch autobenchmark image.
 	$(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${AUTOBENCHMARK_IMG}:${TAG} $(DOCKER_BUILD_ARGS) -f ${AUTOBENCHMARK_DOCKERFILE} .
 	- $(CONTAINER_TOOL) buildx rm rbgs-cli-builder
 
-.PHONY: docker-buildx-dashboard
-docker-buildx-dashboard: ## Build and push multi-arch dashboard image.
+.PHONY: docker-buildx-benchmark-dashboard
+docker-buildx-benchmark-dashboard: ## Build and push multi-arch benchmark-dashboard image.
 	- $(CONTAINER_TOOL) buildx create --name rbgs-cli-builder
 	$(CONTAINER_TOOL) buildx use rbgs-cli-builder
 	$(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${DASHBOARD_IMG}:${TAG} $(DOCKER_BUILD_ARGS) -f ${DASHBOARD_DOCKERFILE} .
 	- $(CONTAINER_TOOL) buildx rm rbgs-cli-builder
 
+.PHONY: docker-buildx-autobenchmark-dashboard
+docker-buildx-autobenchmark-dashboard: ## Build and push multi-arch benchmark-viewer UI image.
+	- $(CONTAINER_TOOL) buildx create --name rbgs-cli-builder
+	$(CONTAINER_TOOL) buildx use rbgs-cli-builder
+	$(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${AUTOBENCHMARK_UI_IMG}:${TAG} -f ${BENCHMARK_UI_DOCKERFILE} .
+	- $(CONTAINER_TOOL) buildx rm rbgs-cli-builder
+
 .PHONY: docker-buildx
-docker-buildx: docker-buildx-autobenchmark docker-buildx-dashboard ## Build and push all multi-arch Docker images.
+docker-buildx: docker-buildx-autobenchmark docker-buildx-benchmark-dashboard docker-buildx-autobenchmark-dashboard ## Build and push all multi-arch Docker images.
 
 ##@ Cleanup
 
