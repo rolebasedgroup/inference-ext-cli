@@ -4,7 +4,7 @@ AUTOBENCHMARK_IMG ?= ${IMG_REPO}/rbgs-autobenchmark
 DASHBOARD_IMG     ?= ${IMG_REPO}/rbgs-benchmark-dashboard
 
 AUTOBENCHMARK_DOCKERFILE ?= cmd/autobenchmark/Dockerfile
-DASHBOARD_DOCKERFILE     ?= cmd/llmctl/benchmark/dashboard/Dockerfile
+DASHBOARD_DOCKERFILE     ?= cmd/benchmark-dashboard/Dockerfile
 
 VERSION ?= v0.7.0
 GIT_SHA ?= $(shell git rev-parse --short HEAD || echo "HEAD")
@@ -90,7 +90,7 @@ build-dashboard: ## Build benchmark dashboard binary.
 	CGO_ENABLED=0 \
 	GO111MODULE=on \
 	GOPROXY=${GOPROXY} \
-	$(GO_CMD) build -v -o bin/dashboard -ldflags $(ldflags) ./cmd/llmctl/benchmark/dashboard/
+	$(GO_CMD) build -v -o bin/dashboard -ldflags $(ldflags) ./cmd/benchmark-dashboard/
 
 .PHONY: build-all
 build-all: build-cli build-autobenchmark build-dashboard ## Build all binaries.
