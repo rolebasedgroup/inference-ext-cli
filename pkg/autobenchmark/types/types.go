@@ -74,11 +74,12 @@ type Metrics struct {
 
 // TemplateState tracks the progress of trials for a single template.
 type TemplateState struct {
-	Name           string        `json:"name"`
-	Completed      bool          `json:"completed"`
-	Trials         []TrialResult `json:"trials"`
-	BestTrial      *TrialResult  `json:"bestTrial,omitempty"`
-	AlgorithmState []byte        `json:"algorithmState,omitempty"`
+	Name              string        `json:"name"`
+	Completed         bool          `json:"completed"`
+	Trials            []TrialResult `json:"trials"`
+	BestTrial         *TrialResult  `json:"bestTrial,omitempty"`
+	AlgorithmState    []byte        `json:"algorithmState,omitempty"`
+	TerminationReason string        `json:"terminationReason,omitempty"`
 }
 
 // ExperimentState is the full checkpoint state persisted to PVC.
