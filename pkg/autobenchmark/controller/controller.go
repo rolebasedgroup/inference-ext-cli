@@ -272,6 +272,15 @@ func (ctrl *Controller) runTrials(
 		if err := WriteResultJSON(ctrl.reportDir, resultDetail); err != nil {
 			logger.Error(err, "Failed to write result detail")
 		}
+
+		// Check early termination conditions
+		if ctrl.cfg.Strategy.EarlyTermination != nil {
+			if et := CheckEarlyTermination(ts.Trials, ctrl.cfg.Strategy.EarlyTermination); et.Terminated {
+				logger.Info("Early termination triggered", "reason", et.Reason)
+				ts.TerminationReason = et.Reason
+				break
+			}
+		}
 	}
 
 	return nil

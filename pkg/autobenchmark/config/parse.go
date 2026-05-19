@@ -180,6 +180,17 @@ func validateStrategy(cfg *AutoBenchmarkConfig) []string {
 			errs = append(errs, fmt.Sprintf("strategy.timeout: invalid duration: %v", err))
 		}
 	}
+	if et := cfg.Strategy.EarlyTermination; et != nil {
+		if et.MaxConsecutiveSLAFailures < 0 {
+			errs = append(errs, "strategy.earlyTermination.maxConsecutiveSLAFailures: must not be negative")
+		}
+		if et.MaxSLAFailureRate < 0 || et.MaxSLAFailureRate > 1 {
+			errs = append(errs, "strategy.earlyTermination.maxSLAFailureRate: must be in [0, 1]")
+		}
+		if et.MinTrials < 0 {
+			errs = append(errs, "strategy.earlyTermination.minTrials: must not be negative")
+		}
+	}
 	return errs
 }
 

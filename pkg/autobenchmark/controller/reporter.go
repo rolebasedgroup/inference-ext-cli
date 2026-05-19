@@ -186,9 +186,10 @@ type ResultSearchSpace map[string]map[string]SearchParamDetail
 
 // TemplateDetail holds all trial results for a single template.
 type TemplateDetail struct {
-	Name      string                `json:"name"`
-	BestTrial *abtypes.TrialResult  `json:"bestTrial,omitempty"`
-	Trials    []abtypes.TrialResult `json:"trials"`
+	Name              string                `json:"name"`
+	BestTrial         *abtypes.TrialResult  `json:"bestTrial,omitempty"`
+	Trials            []abtypes.TrialResult `json:"trials"`
+	TerminationReason string                `json:"terminationReason,omitempty"`
 }
 
 // BuildResult builds a full ResultDetail from experiment state and config.
@@ -253,9 +254,10 @@ func BuildResult(state *abtypes.ExperimentState, cfg *config.AutoBenchmarkConfig
 	// Templates
 	for _, ts := range state.Templates {
 		td := TemplateDetail{
-			Name:      ts.Name,
-			BestTrial: ts.BestTrial,
-			Trials:    ts.Trials,
+			Name:              ts.Name,
+			BestTrial:         ts.BestTrial,
+			Trials:            ts.Trials,
+			TerminationReason: ts.TerminationReason,
 		}
 		result.Templates = append(result.Templates, td)
 	}
