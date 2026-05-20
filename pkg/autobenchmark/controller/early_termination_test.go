@@ -32,6 +32,31 @@ func makeTrial(feasible bool) abtypes.TrialResult {
 	return abtypes.TrialResult{Constraints: []float64{0.5, 0}}
 }
 
+func makeErrorTrial() abtypes.TrialResult {
+	return abtypes.TrialResult{Error: "RBG not ready: context deadline exceeded"}
+}
+
+func TestIsExecutionError(t *testing.T) {
+	tests := []struct {
+		name  string
+		trial abtypes.TrialResult
+		want  bool
+	}{
+		{"no error", makeTrial(true), false},
+		{"SLA failure without error", makeTrial(false), false},
+		{"execution error without metrics", makeErrorTrial(), true},
+		{"error with metrics is not execution error", abtypes.TrialResult{
+			Error:   "benchmark failed: some issue",
+			Metrics: &abtypes.Metrics{OutputThroughput: 100},
+		}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsExecutionError(&tt.trial))
+		})
+	}
+}
+
 func TestCheckEarlyTermination(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -144,6 +169,48 @@ func TestCheckEarlyTermination(t *testing.T) {
 			spec:           &config.EarlyTerminationSpec{MaxConsecutiveSLAFailures: 3, MaxSLAFailureRate: 0.5},
 			wantTerminated: true,
 			wantReason:     "SLA failure rate exceeded limit: 0.80 > 0.50 (4/5 trials failed)",
+		},
+		// --- MaxConsecutiveErrors tests ---
+		{
+			name:           "consecutive errors below threshold",
+			trials:         []abtypes.TrialResult{makeErrorTrial(), makeErrorTrial()},
+			spec:           &config.EarlyTerminationSpec{MaxConsecutiveErrors: 3},
+			wantTerminated: false,
+		},
+		{
+			name:           "consecutive errors at threshold",
+			trials:         []abtypes.TrialResult{makeTrial(true), makeErrorTrial(), makeErrorTrial(), makeErrorTrial()},
+			spec:           &config.EarlyTerminationSpec{MaxConsecutiveErrors: 3},
+			wantTerminated: true,
+			wantReason:     "consecutive execution errors reached limit: 3/3",
+		},
+		{
+			name:           "consecutive errors broken by success",
+			trials:         []abtypes.TrialResult{makeErrorTrial(), makeErrorTrial(), makeTrial(true), makeErrorTrial()},
+			spec:           &config.EarlyTerminationSpec{MaxConsecutiveErrors: 3},
+			wantTerminated: false,
+		},
+		{
+			name:           "consecutive errors broken by SLA failure (not an execution error)",
+			trials:         []abtypes.TrialResult{makeErrorTrial(), makeErrorTrial(), makeTrial(false), makeErrorTrial()},
+			spec:           &config.EarlyTerminationSpec{MaxConsecutiveErrors: 3},
+			wantTerminated: false,
+		},
+		{
+			name:           "consecutive errors NOT gated by minTrials",
+			trials:         []abtypes.TrialResult{makeErrorTrial(), makeErrorTrial(), makeErrorTrial()},
+			spec:           &config.EarlyTerminationSpec{MaxConsecutiveErrors: 3, MinTrials: 10},
+			wantTerminated: true,
+			wantReason:     "consecutive execution errors reached limit: 3/3",
+		},
+		{
+			name: "error check triggers before SLA checks",
+			trials: []abtypes.TrialResult{
+				makeErrorTrial(), makeErrorTrial(), makeErrorTrial(),
+			},
+			spec:           &config.EarlyTerminationSpec{MaxConsecutiveErrors: 3, MaxConsecutiveSLAFailures: 3},
+			wantTerminated: true,
+			wantReason:     "consecutive execution errors reached limit: 3/3",
 		},
 	}
 

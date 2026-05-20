@@ -126,6 +126,14 @@ type EarlyTerminationSpec struct {
 	// consecutive trials all failed SLA constraints.
 	MaxConsecutiveSLAFailures int `yaml:"maxConsecutiveSLAFailures,omitempty" json:"maxConsecutiveSLAFailures,omitempty"`
 
+	// MaxConsecutiveErrors stops the template's trial loop if the last N
+	// consecutive trials all failed with execution errors (build/create/startup/
+	// runtime failures, NOT SLA failures). Unlike SLA failures which may be
+	// caused by suboptimal parameters, consecutive errors typically indicate
+	// broken templates or cluster-level issues. Default: 3.
+	// This check is NOT gated by MinTrials.
+	MaxConsecutiveErrors int `yaml:"maxConsecutiveErrors,omitempty" json:"maxConsecutiveErrors,omitempty"`
+
 	// MaxSLAFailureRate stops the template's trial loop if the ratio of
 	// SLA-failing trials exceeds this threshold (0, 1].
 	// Recommended to use together with MinTrials to avoid premature termination
@@ -133,8 +141,9 @@ type EarlyTerminationSpec struct {
 	MaxSLAFailureRate float64 `yaml:"maxSLAFailureRate,omitempty" json:"maxSLAFailureRate,omitempty"`
 
 	// MinTrials is the minimum number of completed trials required before
-	// any early termination condition is evaluated. Ensures the experiment
-	// always runs at least this many trials regardless of outcomes.
+	// SLA-based early termination conditions are evaluated. Ensures the
+	// experiment always runs at least this many trials regardless of SLA outcomes.
+	// Note: MaxConsecutiveErrors is NOT gated by MinTrials.
 	MinTrials int `yaml:"minTrials,omitempty" json:"minTrials,omitempty"`
 }
 

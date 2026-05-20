@@ -29,6 +29,12 @@ type EarlyTerminationResult struct {
 	Reason     string
 }
 
+// IsExecutionError returns true when the trial failed due to an execution error
+// (build, create, startup, or runtime failure) rather than an SLA violation.
+func IsExecutionError(t *abtypes.TrialResult) bool {
+	return t.Error != "" && t.Metrics == nil
+}
+
 // CheckEarlyTermination evaluates whether the trial loop should be stopped
 // based on the configured early termination conditions.
 func CheckEarlyTermination(trials []abtypes.TrialResult, spec *config.EarlyTerminationSpec) EarlyTerminationResult {
@@ -36,7 +42,28 @@ func CheckEarlyTermination(trials []abtypes.TrialResult, spec *config.EarlyTermi
 		return EarlyTerminationResult{}
 	}
 
-	// Universal guard: skip all checks until MinTrials have completed.
+	// Check consecutive execution errors first — NOT gated by MinTrials because
+	// consecutive errors indicate broken templates or cluster issues, not
+	// suboptimal parameter choices.
+	if spec.MaxConsecutiveErrors > 0 {
+		consecutive := 0
+		for i := len(trials) - 1; i >= 0; i-- {
+			if IsExecutionError(&trials[i]) {
+				consecutive++
+			} else {
+				break
+			}
+		}
+		if consecutive >= spec.MaxConsecutiveErrors {
+			return EarlyTerminationResult{
+				Terminated: true,
+				Reason: fmt.Sprintf("consecutive execution errors reached limit: %d/%d",
+					consecutive, spec.MaxConsecutiveErrors),
+			}
+		}
+	}
+
+	// SLA-based checks are gated by MinTrials.
 	if spec.MinTrials > 0 && len(trials) < spec.MinTrials {
 		return EarlyTerminationResult{}
 	}
