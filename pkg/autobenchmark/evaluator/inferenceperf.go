@@ -285,11 +285,11 @@ func (ip *InferencePerf) buildConfig(evalCtx EvalContext) (*infPerfConfig, error
 		}
 	}
 
-	// Build load stages from concurrency list
-	for _, c := range scenario.Concurrency {
+	// Build single load stage from concurrency
+	if scenario.Concurrency > 0 {
 		cfg.Load.Stages = append(cfg.Load.Stages, infPerfConcurrentStage{
 			NumRequests:      numRequests,
-			ConcurrencyLevel: c,
+			ConcurrencyLevel: scenario.Concurrency,
 		})
 	}
 
@@ -302,20 +302,16 @@ func (ip *InferencePerf) buildConfig(evalCtx EvalContext) (*infPerfConfig, error
 }
 
 func (ip *InferencePerf) buildDataConfig(cfg *infPerfConfig, scenario config.ScenarioSpec, numRequests int) error {
-	if len(scenario.Workloads) == 0 {
-		return fmt.Errorf("at least one workload is required")
+	if scenario.Workload == "" {
+		return fmt.Errorf("workload is required")
 	}
 
-	wlStr := scenario.Workloads[0]
-	wl, err := config.ParseWorkload(wlStr)
+	wl, err := config.ParseWorkload(scenario.Workload)
 	if err != nil {
-		return fmt.Errorf("parsing workload %q: %w", wlStr, err)
+		return fmt.Errorf("parsing workload %q: %w", scenario.Workload, err)
 	}
 
-	totalCount := numRequests * len(scenario.Concurrency)
-	if totalCount == 0 {
-		totalCount = numRequests
-	}
+	totalCount := numRequests
 
 	switch wl.Type {
 	case config.WorkloadFixed:

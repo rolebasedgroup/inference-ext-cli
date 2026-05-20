@@ -118,8 +118,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			ModelName: "my-model",
 			Backend:   "vllm",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"fixed(100,1000)"},
-				Concurrency: []int{64},
+				Workload:    "fixed(100,1000)",
+				Concurrency: 64,
 				MaxRequests: 200,
 			},
 		})
@@ -154,8 +154,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"normal(480,240/300,150)"},
-				Concurrency: []int{4, 8},
+				Workload:    "normal(480,240/300,150)",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -174,8 +174,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 		assert.Equal(t, 1, *cfg.Data.OutputDistribution.Min)  // max(300-3*150, 1) = max(-150, 1) = 1
 		assert.Equal(t, 750, *cfg.Data.OutputDistribution.Max) // 300+3*150 = 750
 
-		// total_count = defaultNumRequests * len(concurrency) = 500 * 2 = 1000
-		assert.Equal(t, 1000, cfg.Data.InputDistribution.TotalCount)
+		// total_count = defaultNumRequests = 500
+		assert.Equal(t, 500, cfg.Data.InputDistribution.TotalCount)
 	})
 
 	t.Run("uniform workload", func(t *testing.T) {
@@ -184,8 +184,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"uniform(100,500/200,800)"},
-				Concurrency: []int{4},
+				Workload:    "uniform(100,500/200,800)",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -210,8 +210,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"dataset"},
-				Concurrency: []int{4},
+				Workload:    "dataset",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -229,8 +229,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"fixed(100,200)"},
-				Concurrency: []int{4},
+				Workload:    "fixed(100,200)",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -239,26 +239,22 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 		assert.False(t, cfg.API.Streaming)
 	})
 
-	t.Run("multiple concurrency levels", func(t *testing.T) {
+	t.Run("single concurrency level", func(t *testing.T) {
 		ip := &InferencePerf{}
 		cfg, err := ip.buildConfig(EvalContext{
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"fixed(100,200)"},
-				Concurrency: []int{64, 128, 256},
+				Workload:    "fixed(100,200)",
+				Concurrency: 64,
 				MaxRequests: 300,
 			},
 		})
 		require.NoError(t, err)
 
-		require.Len(t, cfg.Load.Stages, 3)
+		require.Len(t, cfg.Load.Stages, 1)
 		assert.Equal(t, 64, cfg.Load.Stages[0].ConcurrencyLevel)
-		assert.Equal(t, 128, cfg.Load.Stages[1].ConcurrencyLevel)
-		assert.Equal(t, 256, cfg.Load.Stages[2].ConcurrencyLevel)
-		for _, s := range cfg.Load.Stages {
-			assert.Equal(t, 300, s.NumRequests)
-		}
+		assert.Equal(t, 300, cfg.Load.Stages[0].NumRequests)
 	})
 
 	t.Run("default backend and api key", func(t *testing.T) {
@@ -267,8 +263,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"fixed(100,200)"},
-				Concurrency: []int{4},
+				Workload:    "fixed(100,200)",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -286,8 +282,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"fixed(100,200)"},
-				Concurrency: []int{4},
+				Workload:    "fixed(100,200)",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -304,8 +300,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"fixed(100,200)"},
-				Concurrency: []int{4},
+				Workload:    "fixed(100,200)",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -319,8 +315,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"fixed(100,200)"},
-				Concurrency: []int{4},
+				Workload:    "fixed(100,200)",
+				Concurrency: 4,
 			},
 		})
 		require.NoError(t, err)
@@ -335,11 +331,11 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			Endpoint:  "http://svc:8000",
 			ModelName: "my-model",
 			Scenario: config.ScenarioSpec{
-				Concurrency: []int{4},
+				Concurrency: 4,
 			},
 		})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "at least one workload")
+		assert.Contains(t, err.Error(), "workload is required")
 	})
 
 	t.Run("config serializes to valid YAML", func(t *testing.T) {
@@ -349,8 +345,8 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 			ModelName: "my-model",
 			Backend:   "vllm",
 			Scenario: config.ScenarioSpec{
-				Workloads:   []string{"normal(512,256/2048,1024)"},
-				Concurrency: []int{64, 128},
+				Workload:    "normal(512,256/2048,1024)",
+				Concurrency: 64,
 				MaxRequests: 500,
 			},
 		})
@@ -364,7 +360,7 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 		require.NoError(t, yaml.Unmarshal(data, &roundtrip))
 		assert.Equal(t, cfg.Server.Type, roundtrip.Server.Type)
 		assert.Equal(t, cfg.Data.Type, roundtrip.Data.Type)
-		assert.Len(t, roundtrip.Load.Stages, 2)
+		assert.Len(t, roundtrip.Load.Stages, 1)
 	})
 }
 
