@@ -184,6 +184,9 @@ func validateStrategy(cfg *AutoBenchmarkConfig) []string {
 		if et.MaxConsecutiveSLAFailures < 0 {
 			errs = append(errs, "strategy.earlyTermination.maxConsecutiveSLAFailures: must not be negative")
 		}
+		if et.MaxConsecutiveErrors < 0 {
+			errs = append(errs, "strategy.earlyTermination.maxConsecutiveErrors: must not be negative")
+		}
 		if et.MaxSLAFailureRate < 0 || et.MaxSLAFailureRate > 1 {
 			errs = append(errs, "strategy.earlyTermination.maxSLAFailureRate: must be in [0, 1]")
 		}
@@ -284,6 +287,12 @@ func setDefaults(cfg *AutoBenchmarkConfig) error {
 	}
 	if cfg.Execution.TrialTimeout == "" {
 		cfg.Execution.TrialTimeout = "30m"
+	}
+	if cfg.Strategy.EarlyTermination == nil {
+		cfg.Strategy.EarlyTermination = &EarlyTerminationSpec{}
+	}
+	if cfg.Strategy.EarlyTermination.MaxConsecutiveErrors == 0 {
+		cfg.Strategy.EarlyTermination.MaxConsecutiveErrors = 3
 	}
 	return nil
 }

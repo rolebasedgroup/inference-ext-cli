@@ -31,6 +31,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -141,7 +142,12 @@ func run(configPath, namespace, dataDir string, zapOpts *zap.Options) error {
 		return fmt.Errorf("creating kubernetes client: %w", err)
 	}
 
-	controller, err := abcontroller.NewController(cfg, k8sClient, namespace, stateDir, reportDir)
+	clientset, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return fmt.Errorf("creating kubernetes clientset: %w", err)
+	}
+
+	controller, err := abcontroller.NewController(cfg, k8sClient, clientset, namespace, stateDir, reportDir)
 	if err != nil {
 		return fmt.Errorf("creating controller: %w", err)
 	}
