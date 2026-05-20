@@ -87,7 +87,7 @@ func (g *GenAIBench) Run(ctx context.Context, evalCtx EvalContext) error {
 		// all expected JSONs present ⇒ benchmarks finished, failure is post-benchmark.
 		expected := expectedResultCount(evalCtx.Scenario)
 		actual := countResultJSON(evalCtx.OutputDir)
-		if expected > 0 && actual >= expected {
+		if actual >= expected {
 			logger.Info("genai-bench exited with error but all result files exist, treating as non-fatal",
 				"error", err, "expectedFiles", expected, "actualFiles", actual)
 		} else {
@@ -120,11 +120,15 @@ func countResultJSON(dir string) int {
 	}
 	count := 0
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") && e.Name() != "experiment_metadata.json" {
+		if !e.IsDir() && isBenchmarkResultFile(e.Name()) {
 			count++
 		}
 	}
 	return count
+}
+
+func isBenchmarkResultFile(name string) bool {
+	return strings.HasSuffix(name, ".json") && name != "experiment_metadata.json"
 }
 
 // CollectResults reads result JSON files from the given directory and aggregates metrics.
@@ -142,7 +146,7 @@ func (g *GenAIBench) CollectResults(resultDir string) (*abtypes.Metrics, error) 
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".json") || name == "experiment_metadata.json" {
+		if !isBenchmarkResultFile(name) {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(resultDir, name))
