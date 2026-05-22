@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -55,7 +56,8 @@ type InferencePerf struct {
 func (ip *InferencePerf) Name() string { return "inference-perf" }
 
 // Init reads plugin-specific config.
-// Expected keys: tokenizerSource (string), apiKey (string), baseSeed (int/float64).
+// Expected keys: tokenizerSource (string), apiKey (string), baseSeed (int/float64),
+// apiType (string), streaming (bool), and datasetPath (string).
 func (ip *InferencePerf) Init(cfg map[string]interface{}) error {
 	if v, ok := cfg["tokenizerSource"]; ok {
 		s, ok := v.(string)
@@ -150,8 +152,11 @@ func (ip *InferencePerf) CollectResults(resultDir string) (*abtypes.Metrics, err
 		return nil, err
 	}
 
-	stageResults, err := readStageFiles(reportsDir)
-	if err == nil && len(stageResults) > 0 {
+	stageResults, stageErr := readStageFiles(reportsDir)
+	if stageErr != nil {
+		return nil, fmt.Errorf("reading stage files in %q: %w", reportsDir, stageErr)
+	}
+	if len(stageResults) > 0 {
 		return aggregateInfPerfResults(stageResults), nil
 	}
 
@@ -285,13 +290,13 @@ func (ip *InferencePerf) buildConfig(evalCtx EvalContext) (*infPerfConfig, error
 		}
 	}
 
-	// Build single load stage from concurrency
-	if scenario.Concurrency > 0 {
-		cfg.Load.Stages = append(cfg.Load.Stages, infPerfConcurrentStage{
-			NumRequests:      numRequests,
-			ConcurrencyLevel: scenario.Concurrency,
-		})
+	if scenario.Concurrency <= 0 {
+		return nil, fmt.Errorf("scenario.concurrency must be positive, got %d", scenario.Concurrency)
 	}
+	cfg.Load.Stages = append(cfg.Load.Stages, infPerfConcurrentStage{
+		NumRequests:      numRequests,
+		ConcurrencyLevel: scenario.Concurrency,
+	})
 
 	// Translate workload to data config
 	if err := ip.buildDataConfig(cfg, scenario, numRequests); err != nil {
@@ -333,6 +338,9 @@ func (ip *InferencePerf) buildDataConfig(cfg *infPerfConfig, scenario config.Sce
 			OutputDistribution: uniformDistribution(wl.OutputMin, wl.OutputMax, totalCount),
 		}
 	case config.WorkloadDataset:
+		if ip.datasetPath == "" {
+			return fmt.Errorf("datasetPath is required in evaluator config when workload type is %q", wl.Type)
+		}
 		cfg.Data = infPerfData{Type: "shareGPT", Path: ip.datasetPath}
 	default:
 		return fmt.Errorf("unsupported workload type %q", wl.Type)
@@ -408,20 +416,28 @@ type infPerfPercentiles struct {
 	P99 float64 `json:"p99"`
 }
 
-// findReportsDir locates the reports-* directory inside resultDir.
+// findReportsDir locates the latest reports-* directory inside resultDir.
+// inference-perf names directories with a timestamp suffix (e.g. reports-20260101-120000),
+// so lexicographic sorting yields the most recent run.
 func findReportsDir(resultDir string) (string, error) {
 	entries, err := os.ReadDir(resultDir)
 	if err != nil {
 		return "", fmt.Errorf("reading result directory %q: %w", resultDir, err)
 	}
 
+	var candidates []string
 	for _, e := range entries {
 		if e.IsDir() && strings.HasPrefix(e.Name(), "reports-") {
-			return filepath.Join(resultDir, e.Name()), nil
+			candidates = append(candidates, e.Name())
 		}
 	}
 
-	return "", fmt.Errorf("no reports-* directory found in %q", resultDir)
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("no reports-* directory found in %q", resultDir)
+	}
+
+	sort.Strings(candidates)
+	return filepath.Join(resultDir, candidates[len(candidates)-1]), nil
 }
 
 // readStageFiles reads all stage_N_lifecycle_metrics.json files, sorted by stage number.
@@ -435,7 +451,9 @@ func readStageFiles(reportsDir string) ([]infPerfStageResult, error) {
 		return nil, nil
 	}
 
-	sort.Strings(matches)
+	sort.Slice(matches, func(i, j int) bool {
+		return parseStageNumber(matches[i]) < parseStageNumber(matches[j])
+	})
 
 	results := make([]infPerfStageResult, 0, len(matches))
 	for _, path := range matches {
@@ -446,6 +464,22 @@ func readStageFiles(reportsDir string) ([]infPerfStageResult, error) {
 		results = append(results, *r)
 	}
 	return results, nil
+}
+
+// parseStageNumber extracts the numeric index from a filename like "stage_2_lifecycle_metrics.json".
+// Returns math.MaxInt on parse failure so unparseable names sort last.
+func parseStageNumber(path string) int {
+	base := filepath.Base(path)
+	base = strings.TrimPrefix(base, "stage_")
+	idx := strings.Index(base, "_")
+	if idx < 0 {
+		return math.MaxInt
+	}
+	n, err := strconv.Atoi(base[:idx])
+	if err != nil {
+		return math.MaxInt
+	}
+	return n
 }
 
 func readInfPerfResultFile(path string) (*infPerfStageResult, error) {

@@ -222,6 +222,20 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 		assert.Nil(t, cfg.Data.OutputDistribution)
 	})
 
+	t.Run("dataset workload without datasetPath returns error", func(t *testing.T) {
+		ip := &InferencePerf{}
+		_, err := ip.buildConfig(EvalContext{
+			Endpoint:  "http://svc:8000",
+			ModelName: "my-model",
+			Scenario: config.ScenarioSpec{
+				Workload:    "dataset",
+				Concurrency: 4,
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "datasetPath is required")
+	})
+
 	t.Run("configurable api type and streaming", func(t *testing.T) {
 		streaming := false
 		ip := &InferencePerf{apiType: "chat", streaming: &streaming}
@@ -336,6 +350,20 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "workload is required")
+	})
+
+	t.Run("zero concurrency returns error", func(t *testing.T) {
+		ip := &InferencePerf{}
+		_, err := ip.buildConfig(EvalContext{
+			Endpoint:  "http://svc:8000",
+			ModelName: "my-model",
+			Scenario: config.ScenarioSpec{
+				Workload:    "fixed(100,200)",
+				Concurrency: 0,
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "concurrency must be positive")
 	})
 
 	t.Run("config serializes to valid YAML", func(t *testing.T) {
@@ -458,6 +486,57 @@ func TestInferencePerf_CollectResults(t *testing.T) {
 		_, err := ip.CollectResults(dir)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no reports-* directory")
+	})
+
+	t.Run("multiple reports directories picks latest", func(t *testing.T) {
+		dir := t.TempDir()
+		oldDir := filepath.Join(dir, "reports-20260101-100000")
+		newDir := filepath.Join(dir, "reports-20260514-120000")
+		require.NoError(t, os.MkdirAll(oldDir, 0755))
+		require.NoError(t, os.MkdirAll(newDir, 0755))
+
+		oldSummary := infPerfStageResult{
+			Successes: makeSuccesses(100, 0.050, 0.150, 0.010, 0.030, 500, 250, 750, 10),
+			Failures:  makeFailures(50),
+		}
+		newSummary := infPerfStageResult{
+			Successes: makeSuccesses(500, 0.025, 0.080, 0.004, 0.012, 1800, 900, 2700, 30),
+			Failures:  makeFailures(5),
+		}
+		writeJSON(t, filepath.Join(oldDir, "summary_lifecycle_metrics.json"), oldSummary)
+		writeJSON(t, filepath.Join(newDir, "summary_lifecycle_metrics.json"), newSummary)
+
+		ip := &InferencePerf{}
+		m, err := ip.CollectResults(dir)
+		require.NoError(t, err)
+
+		// Should use the latest (newDir) results
+		assert.InDelta(t, 25.0, m.TTFTP50, 0.01)
+		assert.Equal(t, 500, m.NumCompletedRequests)
+		assert.Equal(t, 5, m.NumErrorRequests)
+	})
+
+	t.Run("corrupted stage file returns error instead of fallback", func(t *testing.T) {
+		dir := t.TempDir()
+		reportsDir := filepath.Join(dir, "reports-20260514-120000")
+		require.NoError(t, os.MkdirAll(reportsDir, 0755))
+
+		require.NoError(t, os.WriteFile(
+			filepath.Join(reportsDir, "stage_0_lifecycle_metrics.json"),
+			[]byte("not valid json"),
+			0644,
+		))
+		// Also provide a valid summary to verify we don't silently fall back to it
+		summary := infPerfStageResult{
+			Successes: makeSuccesses(500, 0.025, 0.080, 0.004, 0.012, 1800, 900, 2700, 30),
+			Failures:  makeFailures(5),
+		}
+		writeJSON(t, filepath.Join(reportsDir, "summary_lifecycle_metrics.json"), summary)
+
+		ip := &InferencePerf{}
+		_, err := ip.CollectResults(dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reading stage files")
 	})
 
 	t.Run("nonexistent directory", func(t *testing.T) {

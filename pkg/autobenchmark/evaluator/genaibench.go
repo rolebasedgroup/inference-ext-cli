@@ -82,9 +82,9 @@ func (g *GenAIBench) Run(ctx context.Context, evalCtx EvalContext) error {
 		// genai-bench does not expose a "benchmark-only" mode; after all benchmark
 		// runs finish it unconditionally generates Excel/plots, which can fail in
 		// container environments (e.g. PVC without random-write support). Since
-		// genai-bench writes result JSON immediately after run completes, we use
-		// the file count as an indirect indicator: all expected JSONs present ->
-		// benchmarks finished, failure is post-benchmark.
+		// genai-bench writes result JSON immediately after each run completes, we
+		// check whether at least one result JSON exists: if so, the benchmark
+		// produced usable output and the failure is post-benchmark.
 		resultsNum := countResultJSON(evalCtx.OutputDir)
 		if resultsNum > 0 {
 			logger.Info("genai-bench exited with error but result files exist, treating as non-fatal", "error", err)
