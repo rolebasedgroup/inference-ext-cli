@@ -82,7 +82,7 @@ func (g *GenAIBench) Run(ctx context.Context, evalCtx EvalContext) error {
 	if evalCtx.OutputDir != "" {
 		if err := os.MkdirAll(evalCtx.OutputDir, 0755); err == nil {
 			if logFile, err := os.Create(filepath.Join(evalCtx.OutputDir, "benchmark.log")); err == nil {
-				defer logFile.Close()
+				defer func() { _ = logFile.Close() }()
 				cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
 				cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
 			}

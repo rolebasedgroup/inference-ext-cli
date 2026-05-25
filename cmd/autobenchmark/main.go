@@ -126,7 +126,7 @@ func run(configPath, namespace, dataDir string, zapOpts *zap.Options) error {
 	if err != nil {
 		return fmt.Errorf("creating controller log file: %w", err)
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
 	fileLogger := zap.New(
 		zap.UseFlagOptions(zapOpts),
