@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -356,13 +357,15 @@ func (ctrl *Controller) executeTrial(
 			return
 		}
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cleanupCancel()
 		err := wait.ExponentialBackoffWithContext(cleanupCtx, wait.Backoff{
 			Duration: 5 * time.Second,
 			Factor:   1,
 			Steps:    3,
 		}, func(ctx context.Context) (bool, error) {
 			if delErr := ctrl.manager.Delete(ctx, trialName); delErr != nil {
+				if apierrors.IsNotFound(delErr) {
+					return true, nil
+				}
 				logger.Info("Failed to cleanup trial RBG, retrying", "rbgName", trialName, "error", delErr.Error())
 				return false, nil
 			}
@@ -371,6 +374,7 @@ func (ctrl *Controller) executeTrial(
 		if err != nil {
 			logger.Error(err, "Failed to cleanup trial RBG after retries", "rbgName", trialName)
 		}
+		cleanupCancel()
 	}()
 
 	// Create trial RBG

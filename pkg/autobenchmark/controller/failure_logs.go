@@ -150,6 +150,12 @@ func (ctrl *Controller) collectFailureLogs(logger logr.Logger, trialName string,
 	var pendingSummaries []string
 	var logFileCount int
 
+	logDir := filepath.Join(resultDir, "pod-logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		logger.Info("Failed to create pod-logs directory", "error", err.Error())
+		return
+	}
+
 	for i := range podList.Items {
 		pod := &podList.Items[i]
 
@@ -160,11 +166,6 @@ func (ctrl *Controller) collectFailureLogs(logger logr.Logger, trialName string,
 			continue
 		}
 
-		logDir := filepath.Join(resultDir, "pod-logs")
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			logger.Info("Failed to create pod-logs directory", "error", err.Error())
-			continue
-		}
 		logPath := filepath.Join(logDir, pod.Name+".log")
 		ctrl.writePodLogs(ctx, logPath, pod)
 		logFileCount++
@@ -221,7 +222,7 @@ func (ctrl *Controller) writePodLogs(ctx context.Context, logPath string, pod *c
 		restartCounts[cs.Name] = cs.RestartCount
 	}
 
-	allContainers := make([]string, 0)
+	allContainers := make([]string, 0, len(pod.Spec.InitContainers)+len(pod.Spec.Containers))
 	for _, c := range pod.Spec.InitContainers {
 		allContainers = append(allContainers, c.Name)
 	}
@@ -231,11 +232,11 @@ func (ctrl *Controller) writePodLogs(ctx context.Context, logPath string, pod *c
 
 	for _, containerName := range allContainers {
 		if restartCounts[containerName] > 0 {
-			sb.WriteString(fmt.Sprintf("=== Container: %s (previous, restartCount=%d) ===\n", containerName, restartCounts[containerName]))
+			fmt.Fprintf(&sb, "=== Container: %s (previous, restartCount=%d) ===\n", containerName, restartCounts[containerName])
 			ctrl.fetchContainerLogs(ctx, &sb, pod.Name, containerName, tailLines, true)
 		}
 
-		sb.WriteString(fmt.Sprintf("=== Container: %s ===\n", containerName))
+		fmt.Fprintf(&sb, "=== Container: %s ===\n", containerName)
 		ctrl.fetchContainerLogs(ctx, &sb, pod.Name, containerName, tailLines, false)
 	}
 
@@ -250,13 +251,13 @@ func (ctrl *Controller) fetchContainerLogs(ctx context.Context, sb *strings.Buil
 	})
 	stream, err := req.Stream(ctx)
 	if err != nil {
-		sb.WriteString(fmt.Sprintf("(failed to get logs: %v)\n\n", err))
+		fmt.Fprintf(sb, "(failed to get logs: %v)\n\n", err)
 		return
 	}
 	logBytes, err := io.ReadAll(stream)
 	_ = stream.Close()
 	if err != nil {
-		sb.WriteString(fmt.Sprintf("(failed to read logs: %v)\n\n", err))
+		fmt.Fprintf(sb, "(failed to read logs: %v)\n\n", err)
 		return
 	}
 	sb.Write(logBytes)
