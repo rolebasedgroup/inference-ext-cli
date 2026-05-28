@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inference-ext-cli"
+version = "0.1.0"
+description = "CLI tools for RBG inference extension: profiling ConfigMap generation and planner injection"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+    "pydantic>=2.0",
+    "transformers>=4.40",
+    "huggingface-hub>=0.23",
+    "kubernetes-asyncio>=31.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-mock>=3.0",
+]
+
+[project.scripts]
+inference-ext-cli = "inference_ext_cli.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["inference_ext_cli*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

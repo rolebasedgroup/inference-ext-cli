@@ -1,0 +1,22 @@
+"""Default constants for SLA profiling."""
+
+# AIPerf defaults
+AIPERF_PREFILL_BENCHMARK_OSL = 5
+AIPERF_WARMUP_REQUEST_PER_DP_RANK = 3
+AIPERF_PREFILL_ATTN_DP_NUM_REQ_RATIO = 4
+
+# Prefill profiling
+PREFILL_MAX_NUM_TOKENS = 32768
+
+# Decode profiling
+DECODE_MAX_CONCURRENCY = 2000
+DECODE_MEASUREMENT_OSL = 500
+
+# RBG profiling
+DEFAULT_ENGINE_PORT = 8000
+DEFAULT_DEPLOYMENT_TIMEOUT = 1800  # 30 minutes
+
+# RBG CRD coordinates
+RBG_GROUP = "workloads.x-k8s.io"
+RBG_VERSION = "v1alpha2"
+RBG_PLURAL = "rolebasedgroups"
