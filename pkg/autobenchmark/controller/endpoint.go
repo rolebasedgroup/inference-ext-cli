@@ -47,8 +47,8 @@ func (ctrl *Controller) resolveEndpoint(trialRBG *v1alpha2.RoleBasedGroup) strin
 		}
 		return lifecycle.GetServiceEndpoint(trialRBG, &role, ctrl.namespace, port)
 	}
-	// Last resort fallback: assume a default worker role at port 8000.
-	return lifecycle.GetServiceEndpoint(trialRBG, &v1alpha2.RoleSpec{Name: "worker"}, ctrl.namespace, 8000)
+	// Last resort fallback: assume a default worker role at the engine's default port.
+	return lifecycle.GetServiceEndpoint(trialRBG, &v1alpha2.RoleSpec{Name: "worker"}, ctrl.namespace, defaultEnginePort(ctrl.cfg.Backend))
 }
 
 // resolveRolePort extracts the inference port for a role.
@@ -94,20 +94,20 @@ func defaultEnginePort(backend string) int {
 	}
 }
 
-// extractServedModelName reads --served-model-name from the base template's container args.
+// extractServedModelName reads the served-model-name flag from the base template's container args.
 // Falls back to the RBG metadata name if the flag is not found.
-func extractServedModelName(rbg *v1alpha2.RoleBasedGroup, backend string) string {
-	flag := "--served-model-name"
-	if backend == "vllm" {
-		flag = "--served-model-name"
-	}
+func extractServedModelName(rbg *v1alpha2.RoleBasedGroup) string {
+	// Both vllm and sglang use --served-model-name.
+	const flag = "--served-model-name"
 	for _, role := range rbg.Spec.Roles {
 		podSpec := getRolePodSpec(&role)
 		if podSpec == nil {
 			continue
 		}
 		for _, c := range podSpec.Containers {
-			allArgs := append(c.Command, c.Args...)
+			allArgs := make([]string, 0, len(c.Command)+len(c.Args))
+			allArgs = append(allArgs, c.Command...)
+			allArgs = append(allArgs, c.Args...)
 			for i, arg := range allArgs {
 				if arg == flag && i+1 < len(allArgs) {
 					return allArgs[i+1]
@@ -147,6 +147,9 @@ func (ctrl *Controller) waitRBGFullyReady(
 	rbgReady := false
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 
+	// Resolve endpoint once — trialRBG is immutable for the duration of the wait.
+	endpoint = ctrl.resolveEndpoint(trialRBG)
+
 	err = wait.PollUntilContextTimeout(ctx, 10*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		if !rbgReady {
 			rbg, err := ctrl.manager.Get(ctx, trialName)
@@ -161,9 +164,12 @@ func (ctrl *Controller) waitRBGFullyReady(
 			rbgReady = true
 		}
 
-		endpoint = ctrl.resolveEndpoint(trialRBG)
 		healthURL := endpoint + "/health"
-		resp, err := httpClient.Get(healthURL)
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+		if reqErr != nil {
+			return false, nil
+		}
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			logger.V(2).Info("Endpoint not ready yet", "error", err.Error())
 			return false, nil // retry
@@ -200,7 +206,7 @@ func sanitizeLabelValue(name string) string {
 	// Replace invalid characters with '-'
 	invalidChars := regexp.MustCompile(`[^a-zA-Z0-9._-]`)
 	name = invalidChars.ReplaceAllString(name, "-")
-	name = strings.Trim(name, "-")
+	name = strings.Trim(name, "-._")
 	if name == "" {
 		name = "default"
 	}

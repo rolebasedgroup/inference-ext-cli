@@ -195,11 +195,10 @@ func (ctrl *Controller) Run(ctx context.Context) error {
 		// template should be resumable on the next run.
 		if ctx.Err() != nil {
 			logger.Info("Experiment timeout during template, not marking completed", "template", tmplRef.Name)
-			ts.BestTrial = SelectBest(ts.Trials)
 		} else {
 			ts.Completed = true
-			ts.BestTrial = SelectBest(ts.Trials)
 		}
+		ts.BestTrial = SelectBest(ts.Trials)
 
 		// Update global best
 		if ts.BestTrial != nil {
@@ -357,11 +356,8 @@ func (ctrl *Controller) executeTrial(
 			return
 		}
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 60*time.Second)
-		err := wait.ExponentialBackoffWithContext(cleanupCtx, wait.Backoff{
-			Duration: 5 * time.Second,
-			Factor:   1,
-			Steps:    3,
-		}, func(ctx context.Context) (bool, error) {
+		defer cleanupCancel()
+		err := wait.PollUntilContextTimeout(cleanupCtx, 5*time.Second, 20*time.Second, true, func(ctx context.Context) (bool, error) {
 			if delErr := ctrl.manager.Delete(ctx, trialName); delErr != nil {
 				if apierrors.IsNotFound(delErr) {
 					return true, nil
@@ -374,7 +370,6 @@ func (ctrl *Controller) executeTrial(
 		if err != nil {
 			logger.Error(err, "Failed to cleanup trial RBG after retries", "rbgName", trialName)
 		}
-		cleanupCancel()
 	}()
 
 	// Create trial RBG
@@ -400,7 +395,7 @@ func (ctrl *Controller) executeTrial(
 		ctrl.collectFailureLogs(logger, trialName, resultDir, &result)
 		return result
 	}
-	modelName := extractServedModelName(baseRBG, ctrl.cfg.Backend)
+	modelName := extractServedModelName(baseRBG)
 
 	// Result directory: {reportDir}/{scenario}/{templateName}/trial-{idx}
 	scenario := ctrl.cfg.Scenario

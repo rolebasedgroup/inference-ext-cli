@@ -55,6 +55,7 @@ func BuildReport(state *abtypes.ExperimentState) *Report {
 	}
 
 	totalTrials := 0
+	totalEvaluated := 0
 	totalPass := 0
 
 	for _, ts := range state.Templates {
@@ -67,6 +68,7 @@ func BuildReport(state *abtypes.ExperimentState) *Report {
 			if IsExecutionError(&ts.Trials[i]) {
 				continue
 			}
+			totalEvaluated++
 			if ts.Trials[i].IsSLAFeasible() {
 				tr.NumSLAPass++
 			}
@@ -78,9 +80,9 @@ func BuildReport(state *abtypes.ExperimentState) *Report {
 
 	if state.GlobalBest != nil {
 		report.Summary = fmt.Sprintf(
-			"Best result: template=%q, trial=%d, score=%.2f (%d/%d trials passed SLA)",
+			"Best result: template=%q, trial=%d, score=%.2f (%d/%d evaluated trials passed SLA)",
 			state.GlobalBest.TemplateName, state.GlobalBest.TrialIndex,
-			state.GlobalBest.Score, totalPass, totalTrials,
+			state.GlobalBest.Score, totalPass, totalEvaluated,
 		)
 	} else {
 		report.Summary = fmt.Sprintf(

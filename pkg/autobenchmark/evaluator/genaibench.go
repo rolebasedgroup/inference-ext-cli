@@ -80,12 +80,14 @@ func (g *GenAIBench) Run(ctx context.Context, evalCtx EvalContext) error {
 	cmd.Stderr = os.Stderr
 
 	if evalCtx.OutputDir != "" {
-		if err := os.MkdirAll(evalCtx.OutputDir, 0755); err == nil {
-			if logFile, err := os.Create(filepath.Join(evalCtx.OutputDir, "benchmark.log")); err == nil {
-				defer func() { _ = logFile.Close() }()
-				cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
-				cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
-			}
+		if err := os.MkdirAll(evalCtx.OutputDir, 0755); err != nil {
+			logger.Info("Failed to create output directory, benchmark.log will not be written", "dir", evalCtx.OutputDir, "error", err)
+		} else if logFile, err := os.Create(filepath.Join(evalCtx.OutputDir, "benchmark.log")); err != nil {
+			logger.Info("Failed to create benchmark.log, proceeding without log file", "error", err)
+		} else {
+			defer func() { _ = logFile.Close() }()
+			cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
+			cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
 		}
 	}
 

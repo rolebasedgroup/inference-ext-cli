@@ -66,7 +66,7 @@ func resolveEngine(engineType string, cfg *cliconfig.Config) (*cliconfig.EngineC
 	}
 
 	// 3. Use default (empty config) - plugin will use its built-in defaults
-	fmt.Printf("INFO: Using default configuration for engine '%s'. Run 'llmctl config add-engine %s' to customize.\n", engineType, engineType)
+	fmt.Printf("INFO: Using default configuration for engine '%s'. Run 'llmctl config set-engine %s' to customize.\n", engineType, engineType)
 	return &cliconfig.EngineConfig{
 		Type:   engineType,
 		Config: map[string]interface{}{},

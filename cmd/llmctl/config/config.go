@@ -42,7 +42,7 @@ Examples:
   llmctl config view
 
   # Add a new storage configuration
-  llmctl config add-storage my-pvc --type pvc --config claimName=model-pvc
+  llmctl config add-storage my-pvc --type pvc --config pvcName=model-pvc
 
   # Add a new model source
   llmctl config add-source huggingface --type huggingface --config token=hf_xxx

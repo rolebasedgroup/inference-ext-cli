@@ -74,7 +74,7 @@ func CheckEarlyTermination(trials []abtypes.TrialResult, spec config.EarlyTermin
 		consecutive := 0
 		for i := len(trials) - 1; i >= 0; i-- {
 			if IsExecutionError(&trials[i]) {
-				break
+				continue
 			}
 			if !trials[i].IsSLAFeasible() {
 				consecutive++

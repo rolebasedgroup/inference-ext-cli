@@ -24,6 +24,197 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func TestIdentifyFailedPods(t *testing.T) {
+	tests := []struct {
+		name           string
+		pods           []corev1.Pod
+		preRunRestarts podRestartSnapshot
+		wantNames      []string
+	}{
+		{
+			name:           "no pods returns nil",
+			pods:           nil,
+			preRunRestarts: nil,
+			wantNames:      nil,
+		},
+		{
+			name: "pod in Failed phase is collected",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "failed-pod"},
+					Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+				},
+			},
+			preRunRestarts: nil,
+			wantNames:      []string{"failed-pod"},
+		},
+		{
+			name: "pod in Running phase with no restart increase is skipped",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "healthy-pod"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "main", RestartCount: 2},
+						},
+					},
+				},
+			},
+			preRunRestarts: podRestartSnapshot{"healthy-pod/main": 2},
+			wantNames:      nil,
+		},
+		{
+			name: "container restart count increased is collected",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "oom-pod"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "vllm", RestartCount: 3},
+						},
+					},
+				},
+			},
+			preRunRestarts: podRestartSnapshot{"oom-pod/vllm": 2},
+			wantNames:      []string{"oom-pod"},
+		},
+		{
+			name: "init container restart count increased is collected",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "init-crash-pod"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						InitContainerStatuses: []corev1.ContainerStatus{
+							{Name: "init", RestartCount: 1},
+						},
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "main", RestartCount: 0},
+						},
+					},
+				},
+			},
+			preRunRestarts: podRestartSnapshot{
+				"init-crash-pod/init": 0,
+				"init-crash-pod/main": 0,
+			},
+			wantNames: []string{"init-crash-pod"},
+		},
+		{
+			name: "nil snapshot skips restart check but still detects PodFailed",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "crashed-pod"},
+					Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "running-restarted"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "main", RestartCount: 5},
+						},
+					},
+				},
+			},
+			preRunRestarts: nil,
+			wantNames:      []string{"crashed-pod"},
+		},
+		{
+			name: "mixed: Failed pod and restarted pod both collected",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod-failed"},
+					Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod-oom"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "engine", RestartCount: 1},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod-healthy"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "engine", RestartCount: 0},
+						},
+					},
+				},
+			},
+			preRunRestarts: podRestartSnapshot{
+				"pod-oom/engine":     0,
+				"pod-healthy/engine": 0,
+			},
+			wantNames: []string{"pod-failed", "pod-oom"},
+		},
+		{
+			name: "new container not in snapshot is collected (restart from 0 to 1)",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "new-container-pod"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "sidecar", RestartCount: 1},
+						},
+					},
+				},
+			},
+			preRunRestarts: podRestartSnapshot{},
+			wantNames:      []string{"new-container-pod"},
+		},
+		{
+			name: "Succeeded pod is not collected",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "done-pod"},
+					Status:     corev1.PodStatus{Phase: corev1.PodSucceeded},
+				},
+			},
+			preRunRestarts: podRestartSnapshot{},
+			wantNames:      nil,
+		},
+		{
+			name: "multiple containers - only one restarted triggers collection",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "multi-container-pod"},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{Name: "engine", RestartCount: 0},
+							{Name: "router", RestartCount: 2},
+						},
+					},
+				},
+			},
+			preRunRestarts: podRestartSnapshot{
+				"multi-container-pod/engine": 0,
+				"multi-container-pod/router": 1,
+			},
+			wantNames: []string{"multi-container-pod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := identifyFailedPods(tt.pods, tt.preRunRestarts)
+			var gotNames []string
+			for _, p := range got {
+				gotNames = append(gotNames, p.Name)
+			}
+			assert.Equal(t, tt.wantNames, gotNames)
+		})
+	}
+}
+
 func TestSummarizePendingPod(t *testing.T) {
 	tests := []struct {
 		name string

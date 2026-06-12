@@ -144,8 +144,8 @@ func validateScenario(cfg *AutoBenchmarkConfig) []string {
 	} else if err := ValidateWorkload(cfg.Scenario.Workload); err != nil {
 		errs = append(errs, fmt.Sprintf("scenario.workload: %v", err))
 	}
-	if cfg.Scenario.MaxRequests <= 0 {
-		errs = append(errs, "scenario.maxRequests: must be positive")
+	if cfg.Scenario.MaxRequests < 0 {
+		errs = append(errs, "scenario.maxRequests: must not be negative (0 means use tool default)")
 	}
 	if cfg.Scenario.Concurrency <= 0 {
 		errs = append(errs, "scenario.concurrency: must be positive")

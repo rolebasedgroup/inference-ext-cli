@@ -66,6 +66,30 @@ func (ctrl *Controller) snapshotRestartCounts(logger logr.Logger, trialName stri
 	return snap
 }
 
+// identifyFailedPods filters pods that actually crashed during the benchmark:
+//   - Pod in Failed phase → indicates pod crash
+//   - Any container RestartCount increased vs. preRunRestarts snapshot → OOM or similar crash
+//   - Neither → benchmark tool's own problem, not a pod crash
+func identifyFailedPods(pods []corev1.Pod, preRunRestarts podRestartSnapshot) []*corev1.Pod {
+	var failedPods []*corev1.Pod
+	for i := range pods {
+		pod := &pods[i]
+		if pod.Status.Phase == corev1.PodFailed {
+			failedPods = append(failedPods, pod)
+			continue
+		}
+		if preRunRestarts != nil {
+			for _, cs := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
+				if cs.RestartCount > preRunRestarts[pod.Name+"/"+cs.Name] {
+					failedPods = append(failedPods, pod)
+					break
+				}
+			}
+		}
+	}
+	return failedPods
+}
+
 // collectBenchmarkFailureLogs checks pod state after eval.Run failure and
 // collects logs only when pods actually crashed during the benchmark:
 //   - Pod in Failed phase → collect current logs (before RBG controller deletes it)
@@ -84,27 +108,9 @@ func (ctrl *Controller) collectBenchmarkFailureLogs(logger logr.Logger, trialNam
 		return
 	}
 
-	var needLogs bool
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		if pod.Status.Phase == corev1.PodFailed {
-			needLogs = true
-			break
-		}
-		if preRunRestarts != nil {
-			for _, cs := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
-				if cs.RestartCount > preRunRestarts[pod.Name+"/"+cs.Name] {
-					needLogs = true
-					break
-				}
-			}
-		}
-		if needLogs {
-			break
-		}
-	}
+	failedPods := identifyFailedPods(podList.Items, preRunRestarts)
 
-	if !needLogs {
+	if len(failedPods) == 0 {
 		return
 	}
 
@@ -114,13 +120,12 @@ func (ctrl *Controller) collectBenchmarkFailureLogs(logger logr.Logger, trialNam
 		return
 	}
 
-	for i := range podList.Items {
-		pod := &podList.Items[i]
+	for _, pod := range failedPods {
 		logPath := filepath.Join(logDir, pod.Name+".log")
 		ctrl.writePodLogs(ctx, logPath, pod)
 	}
 
-	logger.Info("Collected benchmark failure logs", "logDir", logDir)
+	logger.Info("Collected benchmark failure logs", "logDir", logDir, "pods", len(failedPods))
 }
 
 // collectFailureLogs fetches failure context from all pods belonging to the
@@ -172,8 +177,12 @@ func (ctrl *Controller) collectFailureLogs(logger logr.Logger, trialName string,
 	}
 
 	if len(pendingSummaries) > 0 {
-		result.Error = fmt.Sprintf("%s; pending pods: %s",
-			result.Error, strings.Join(pendingSummaries, "; "))
+		pendingMsg := "pending pods: " + strings.Join(pendingSummaries, "; ")
+		if result.Error != "" {
+			result.Error += "; " + pendingMsg
+		} else {
+			result.Error = pendingMsg
+		}
 	}
 
 	if logFileCount > 0 {
@@ -254,8 +263,10 @@ func (ctrl *Controller) fetchContainerLogs(ctx context.Context, sb *strings.Buil
 		fmt.Fprintf(sb, "(failed to get logs: %v)\n\n", err)
 		return
 	}
+	defer func() {
+		_ = stream.Close()
+	}()
 	logBytes, err := io.ReadAll(stream)
-	_ = stream.Close()
 	if err != nil {
 		fmt.Fprintf(sb, "(failed to read logs: %v)\n\n", err)
 		return

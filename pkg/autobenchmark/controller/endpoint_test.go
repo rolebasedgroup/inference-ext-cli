@@ -65,6 +65,8 @@ func TestSanitizeLabelValue(t *testing.T) {
 		{"special chars replaced", "exp name@v1!", "exp-name-v1"},
 		{"empty after sanitize", "@@@@", "default"},
 		{"leading and trailing dashes trimmed", "-my-exp-", "my-exp"},
+		{"trailing dot trimmed", "my-exp.", "my-exp"},
+		{"trailing underscore trimmed", "my-exp_", "my-exp"},
 		{"all dashes becomes default", "---", "default"},
 	}
 
@@ -198,10 +200,9 @@ func TestIsRBGReady(t *testing.T) {
 
 func TestExtractServedModelName(t *testing.T) {
 	tests := []struct {
-		name    string
-		rbg     *v1alpha2.RoleBasedGroup
-		backend string
-		want    string
+		name string
+		rbg  *v1alpha2.RoleBasedGroup
+		want string
 	}{
 		{
 			name: "flag in args",
@@ -217,8 +218,7 @@ func TestExtractServedModelName(t *testing.T) {
 					},
 				},
 			},
-			backend: "vllm",
-			want:    "llama-3",
+			want: "llama-3",
 		},
 		{
 			name: "flag in command",
@@ -237,8 +237,7 @@ func TestExtractServedModelName(t *testing.T) {
 					},
 				},
 			},
-			backend: "vllm",
-			want:    "gpt-custom",
+			want: "gpt-custom",
 		},
 		{
 			name: "flag not found - fallback to rbg name",
@@ -254,22 +253,20 @@ func TestExtractServedModelName(t *testing.T) {
 					},
 				},
 			},
-			backend: "vllm",
-			want:    "my-rbg",
+			want: "my-rbg",
 		},
 		{
 			name: "no roles",
 			rbg: &v1alpha2.RoleBasedGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "empty-rbg"},
 			},
-			backend: "sglang",
-			want:    "empty-rbg",
+			want: "empty-rbg",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, extractServedModelName(tt.rbg, tt.backend))
+			assert.Equal(t, tt.want, extractServedModelName(tt.rbg))
 		})
 	}
 }
