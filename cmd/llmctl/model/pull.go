@@ -41,12 +41,14 @@ import (
 
 func newPullCmd(cf *genericclioptions.ConfigFlags) *cobra.Command {
 	var (
-		revision string
-		source   string
-		storage  string
-		wait     bool
-		memory   string
-		cpu      string
+		revision         string
+		source           string
+		storage          string
+		wait             bool
+		memory           string
+		cpu              string
+		image            string
+		imagePullSecrets []string
 	)
 
 	cmd := &cobra.Command{
@@ -144,6 +146,10 @@ Examples:
 				return fmt.Errorf("failed to generate download template: %w", err)
 			}
 
+			if image != "" && len(podTemplate.Spec.Containers) > 0 {
+				podTemplate.Spec.Containers[0].Image = image
+			}
+
 			// Inject metadata saving logic - wraps the original command to save model info after download
 			injectMetadataSave(podTemplate, modelID, revision, modelPath)
 
@@ -163,6 +169,15 @@ Examples:
 
 			// Apply resource limits to the download container
 			applyPullResources(podTemplate, cpu, memory)
+
+			// Apply image pull secrets
+			imagePullSecretRefs, err := shared.ToImagePullSecrets(imagePullSecrets)
+			if err != nil {
+				return err
+			}
+			if len(imagePullSecretRefs) > 0 {
+				podTemplate.Spec.ImagePullSecrets = append(podTemplate.Spec.ImagePullSecrets, imagePullSecretRefs...)
+			}
 
 			// Create the Job
 			job := buildPullJob(modelID, podTemplate)
@@ -208,6 +223,8 @@ Examples:
 	cmd.Flags().BoolVar(&wait, "wait", true, "Wait for the pull job to complete and stream logs")
 	cmd.Flags().StringVar(&memory, "memory", defaultPullMemory, "Memory request/limit for the download container (e.g. 8Gi, 16Gi)")
 	cmd.Flags().StringVar(&cpu, "cpu", defaultPullCPU, "CPU request/limit for the download container (e.g. 2, 4)")
+	cmd.Flags().StringVar(&image, "image", "", "Container image override for the download job (default: from source plugin)")
+	cmd.Flags().StringArrayVar(&imagePullSecrets, "image-pull-secret", nil, "Image pull secret names for private registries (can be specified multiple times)")
 
 	return cmd
 }

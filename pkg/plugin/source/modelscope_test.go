@@ -70,7 +70,7 @@ func TestModelScopeSource_GenerateTemplate_NoToken(t *testing.T) {
 	require.NotNil(t, tpl)
 	c := tpl.Spec.Containers[0]
 	assert.Equal(t, "download", c.Name)
-	assert.Equal(t, "python:3.11-slim", c.Image)
+	assert.Equal(t, DefaultModelScopeImage, c.Image)
 	// Check that model parameters are passed via environment variables (not string concatenation)
 	require.Len(t, c.Env, 2)
 	envMap := msEnvToMap(c.Env)

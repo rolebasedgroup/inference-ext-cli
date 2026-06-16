@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // --- SanitizeModelID ---
@@ -50,4 +52,39 @@ func TestSanitizeModelID_NoChange(t *testing.T) {
 
 func TestSanitizeModelID_Empty(t *testing.T) {
 	assert.Equal(t, "", SanitizeModelID(""))
+}
+
+// --- ToImagePullSecrets ---
+
+func TestToImagePullSecrets_Nil(t *testing.T) {
+	refs, err := ToImagePullSecrets(nil)
+	require.NoError(t, err)
+	assert.Nil(t, refs)
+}
+
+func TestToImagePullSecrets_Empty(t *testing.T) {
+	refs, err := ToImagePullSecrets([]string{})
+	require.NoError(t, err)
+	assert.Nil(t, refs)
+}
+
+func TestToImagePullSecrets_Valid(t *testing.T) {
+	refs, err := ToImagePullSecrets([]string{"secret-a", "secret-b"})
+	require.NoError(t, err)
+	assert.Equal(t, []corev1.LocalObjectReference{
+		{Name: "secret-a"},
+		{Name: "secret-b"},
+	}, refs)
+}
+
+func TestToImagePullSecrets_EmptyName(t *testing.T) {
+	_, err := ToImagePullSecrets([]string{"valid", ""})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be empty")
+}
+
+func TestToImagePullSecrets_WhitespaceOnly(t *testing.T) {
+	_, err := ToImagePullSecrets([]string{"  "})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be empty")
 }

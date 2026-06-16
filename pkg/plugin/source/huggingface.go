@@ -27,6 +27,8 @@ func init() {
 	})
 }
 
+const DefaultHuggingFaceImage = "rolebasedgroup/model-downloader-huggingface:v0.0.1"
+
 // HuggingFaceSource implements the SourcePlugin interface for HuggingFace
 type HuggingFaceSource struct {
 	Token       string
@@ -119,14 +121,14 @@ revision = os.environ.get('MODEL_REVISION', 'main')
 
 snapshot_download(repo_id=model_id, local_dir=local_dir, revision=revision)`
 
-	downloadCmd := "pip install huggingface_hub -q && python -c \"" + pythonScript + "\""
+	downloadCmd := "python -c \"" + pythonScript + "\""
 
 	return &corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
 					Name:    "download",
-					Image:   "python:3.11-slim",
+					Image:   DefaultHuggingFaceImage,
 					Command: []string{"/bin/sh", "-c"},
 					Args:    []string{downloadCmd},
 					Env:     env,

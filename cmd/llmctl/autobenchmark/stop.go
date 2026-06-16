@@ -51,7 +51,7 @@ func runStop(ctx context.Context, cf *genericclioptions.ConfigFlags, expName str
 	}
 
 	namespace := util.GetNamespace(cf)
-	labelSelector := fmt.Sprintf("%s=%s", constant.AutoBenchmarkLabelKey, expName)
+	labelSelector := fmt.Sprintf("%s=%s", constant.AutoBenchmarkLabelKey, sanitizeResourceName(expName))
 
 	// Delete controller Job(s) by experiment label
 	jobList, err := clientset.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{

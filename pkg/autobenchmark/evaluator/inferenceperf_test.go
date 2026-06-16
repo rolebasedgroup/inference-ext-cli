@@ -171,7 +171,7 @@ func TestInferencePerf_BuildConfig(t *testing.T) {
 		require.NotNil(t, cfg.Data.OutputDistribution)
 		assert.Equal(t, float64(300), *cfg.Data.OutputDistribution.Mean)
 		assert.Equal(t, float64(150), *cfg.Data.OutputDistribution.StdDev)
-		assert.Equal(t, 1, *cfg.Data.OutputDistribution.Min)  // max(300-3*150, 1) = max(-150, 1) = 1
+		assert.Equal(t, 1, *cfg.Data.OutputDistribution.Min)   // max(300-3*150, 1) = max(-150, 1) = 1
 		assert.Equal(t, 750, *cfg.Data.OutputDistribution.Max) // 300+3*150 = 750
 
 		// total_count = defaultNumRequests = 500
@@ -440,15 +440,15 @@ func TestInferencePerf_CollectResults(t *testing.T) {
 
 		// Latency: worst-case across stages (in ms)
 		assert.InDelta(t, 20.0, m.TTFTP50, 0.01)  // max(10, 20)
-		assert.InDelta(t, 100.0, m.TTFTP99, 0.01)  // max(50, 100)
-		assert.InDelta(t, 5.0, m.TPOTP50, 0.01)    // max(3, 5)
-		assert.InDelta(t, 20.0, m.TPOTP99, 0.01)   // max(8, 20)
+		assert.InDelta(t, 100.0, m.TTFTP99, 0.01) // max(50, 100)
+		assert.InDelta(t, 5.0, m.TPOTP50, 0.01)   // max(3, 5)
+		assert.InDelta(t, 20.0, m.TPOTP99, 0.01)  // max(8, 20)
 
 		// Throughput: averaged
-		assert.InDelta(t, 1500.0, m.OutputThroughput, 0.01)  // (1000+2000)/2
-		assert.InDelta(t, 750.0, m.InputThroughput, 0.01)    // (500+1000)/2
-		assert.InDelta(t, 2250.0, m.TotalThroughput, 0.01)   // (1500+3000)/2
-		assert.InDelta(t, 30.0, m.RequestsPerSecond, 0.01)   // (20+40)/2
+		assert.InDelta(t, 1500.0, m.OutputThroughput, 0.01) // (1000+2000)/2
+		assert.InDelta(t, 750.0, m.InputThroughput, 0.01)   // (500+1000)/2
+		assert.InDelta(t, 2250.0, m.TotalThroughput, 0.01)  // (1500+3000)/2
+		assert.InDelta(t, 30.0, m.RequestsPerSecond, 0.01)  // (20+40)/2
 
 		// Request counts: summed
 		assert.Equal(t, 400, m.NumCompletedRequests)

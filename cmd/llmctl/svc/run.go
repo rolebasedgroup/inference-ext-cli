@@ -75,19 +75,24 @@ func resolveEngine(engineType string, cfg *cliconfig.Config) (*cliconfig.EngineC
 
 // RunParams holds all flag values supplied to the run command.
 type RunParams struct {
-	Mode            string
-	Engine          string
-	Image           string
-	Storage         string
-	Revision        string
-	ModelPath       string
-	EnvVars         []string
-	ArgsList        []string
-	DryRun          bool
-	Replicas        int32
-	Resources       []string // key=value pairs, e.g. "nvidia.com/gpu=1"
-	DistributedSize int32
-	ShmSize         string
+	Mode             string
+	Engine           string
+	Image            string
+	Storage          string
+	Revision         string
+	ModelPath        string
+	EnvVars          []string
+	ArgsList         []string
+	DryRun           bool
+	Replicas         int32
+	Resources        []string // key=value pairs, e.g. "nvidia.com/gpu=1"
+	DistributedSize  int32
+	ShmSize          string
+	ModelPrefetch    bool
+	Tolerations      []string
+	ImagePullSecrets []string
+	HostNetwork      bool
+	NodeSelector     []string // key=value pairs
 }
 
 // modeConfigResult holds the result of mode config resolution.
@@ -217,6 +222,59 @@ func parseResources(resourceFlags []string) (corev1.ResourceList, error) {
 	return result, nil
 }
 
+// parseToleration parses a toleration string into a corev1.Toleration.
+// Supported formats:
+//   - "key=value:effect" → operator Equal
+//   - "key:effect"       → operator Exists
+//   - "key=value"        → operator Equal, matches all effects
+//   - "key"              → operator Exists, matches all effects
+func parseToleration(s string) (corev1.Toleration, error) {
+	if s == "" {
+		return corev1.Toleration{}, fmt.Errorf("empty toleration string")
+	}
+
+	var key, value, effect string
+	var operator corev1.TolerationOperator
+
+	if colonIdx := strings.LastIndex(s, ":"); colonIdx != -1 {
+		effect = s[colonIdx+1:]
+		prefix := s[:colonIdx]
+		switch corev1.TaintEffect(effect) {
+		case corev1.TaintEffectNoSchedule, corev1.TaintEffectPreferNoSchedule, corev1.TaintEffectNoExecute:
+		default:
+			return corev1.Toleration{}, fmt.Errorf("invalid toleration effect %q, must be NoSchedule, PreferNoSchedule, or NoExecute", effect)
+		}
+		if eqIdx := strings.Index(prefix, "="); eqIdx != -1 {
+			key = prefix[:eqIdx]
+			value = prefix[eqIdx+1:]
+			operator = corev1.TolerationOpEqual
+		} else {
+			key = prefix
+			operator = corev1.TolerationOpExists
+		}
+	} else {
+		if eqIdx := strings.Index(s, "="); eqIdx != -1 {
+			key = s[:eqIdx]
+			value = s[eqIdx+1:]
+			operator = corev1.TolerationOpEqual
+		} else {
+			key = s
+			operator = corev1.TolerationOpExists
+		}
+	}
+
+	if key == "" {
+		return corev1.Toleration{}, fmt.Errorf("invalid toleration %q: key must not be empty", s)
+	}
+
+	return corev1.Toleration{
+		Key:      key,
+		Operator: operator,
+		Value:    value,
+		Effect:   corev1.TaintEffect(effect),
+	}, nil
+}
+
 // applyFlagOverrides applies flag values onto a ModeConfig.
 // For Image, DistributedSize, ShmSize: flag value overrides config when non-zero.
 // For Resources: flag values are merged by key (flag wins on conflict).
@@ -267,6 +325,34 @@ func applyFlagOverrides(modeCfg *runpkg.ModeConfig, p RunParams) error {
 		}
 	}
 	modeCfg.Args = append(modeCfg.Args, p.ArgsList...)
+	for _, t := range p.Tolerations {
+		tol, err := parseToleration(t)
+		if err != nil {
+			return err
+		}
+		modeCfg.Tolerations = append(modeCfg.Tolerations, tol)
+	}
+	modeCfg.ImagePullSecrets = append(modeCfg.ImagePullSecrets, p.ImagePullSecrets...)
+	// Validate the merged list (flag-provided + YAML-loaded entries) so that
+	// empty names from either source are caught early with a clear error.
+	if _, err := shared.ToImagePullSecrets(modeCfg.ImagePullSecrets); err != nil {
+		return err
+	}
+	if p.HostNetwork {
+		modeCfg.HostNetwork = true
+	}
+	if len(p.NodeSelector) > 0 {
+		if modeCfg.NodeSelector == nil {
+			modeCfg.NodeSelector = make(map[string]string)
+		}
+		for _, ns := range p.NodeSelector {
+			parts := strings.SplitN(ns, "=", 2)
+			if len(parts) != 2 || parts[0] == "" {
+				return fmt.Errorf("invalid node-selector format: %q, expected key=value (key must not be empty)", ns)
+			}
+			modeCfg.NodeSelector[parts[0]] = parts[1]
+		}
+	}
 	return nil
 }
 
@@ -290,16 +376,23 @@ func buildGenerateOptions(name, modelID, modelPath string, modeCfg *runpkg.ModeC
 		resources.Limits = limits
 	}
 
+	// applyFlagOverrides already validated the merged list; convert directly.
+	imagePullSecrets, _ := shared.ToImagePullSecrets(modeCfg.ImagePullSecrets)
+
 	return engineplugin.GenerateOptions{
-		Name:            name,
-		ModelID:         modelID,
-		ModelPath:       modelPath,
-		Image:           modeCfg.Image,
-		Args:            modeCfg.Args,
-		Env:             modeCfg.Env,
-		Resources:       resources,
-		DistributedSize: distributedSize,
-		ShmSize:         modeCfg.ShmSize,
+		Name:             name,
+		ModelID:          modelID,
+		ModelPath:        modelPath,
+		Image:            modeCfg.Image,
+		Args:             modeCfg.Args,
+		Env:              modeCfg.Env,
+		Resources:        resources,
+		DistributedSize:  distributedSize,
+		ShmSize:          modeCfg.ShmSize,
+		Tolerations:      modeCfg.Tolerations,
+		ImagePullSecrets: imagePullSecrets,
+		HostNetwork:      modeCfg.HostNetwork,
+		NodeSelector:     modeCfg.NodeSelector,
 	}
 }
 
@@ -369,6 +462,25 @@ func generateRBG(name, modelID, namespace string, p RunParams, userCfg *cliconfi
 		return nil, llmmeta.RunMetadata{}, fmt.Errorf("engine %q generated pattern with no containers", modeRes.engineType)
 	}
 
+	// 4b. Apply tolerations, imagePullSecrets, hostNetwork, and nodeSelector to pod template
+	if len(opts.Tolerations) > 0 {
+		podTemplate.Spec.Tolerations = append(podTemplate.Spec.Tolerations, opts.Tolerations...)
+	}
+	if len(opts.ImagePullSecrets) > 0 {
+		podTemplate.Spec.ImagePullSecrets = append(podTemplate.Spec.ImagePullSecrets, opts.ImagePullSecrets...)
+	}
+	if opts.HostNetwork {
+		podTemplate.Spec.HostNetwork = true
+	}
+	if len(opts.NodeSelector) > 0 {
+		if podTemplate.Spec.NodeSelector == nil {
+			podTemplate.Spec.NodeSelector = make(map[string]string)
+		}
+		for k, v := range opts.NodeSelector {
+			podTemplate.Spec.NodeSelector[k] = v
+		}
+	}
+
 	// 5. Mount storage
 	if storageRes.storagePlugin != nil && storageRes.storageName != "" {
 		mountOpts := storageplugin.MountOptions{
@@ -389,7 +501,42 @@ func generateRBG(name, modelID, namespace string, p RunParams, userCfg *cliconfi
 		}
 	}
 
-	// 6. Extract port and build metadata
+	// 6. Add model prefetch lifecycle hook
+	if p.ModelPrefetch {
+		container := &podTemplate.Spec.Containers[0]
+		// Pass model path via environment variable to prevent shell injection.
+		// The path is user-controlled (--model-path flag) and must not be
+		// embedded directly into a shell command string.
+		const prefetchPathEnv = "__MODEL_PREFETCH_PATH"
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  prefetchPathEnv,
+			Value: storageRes.modelPath,
+		})
+		// Prefetch warms the OS page cache by reading all model files.
+		// Design choices:
+		//  - timeout 600: bounds the entire prefetch so PostStart cannot
+		//    block indefinitely and trigger kubelet restart loops.
+		//  - find -print0 | xargs -0: null-delimited for filenames with
+		//    spaces, newlines, or special characters.
+		//  - xargs -r: skip execution when find produces no output (empty
+		//    directory) to avoid cat hanging on stdin.
+		//  - No -n1: let xargs batch many files per cat invocation,
+		//    dramatically reducing process-spawn overhead for large checkpoints.
+		//  - -P 4: four parallel cat processes for I/O concurrency.
+		//  - 2>/dev/null on find: suppress permission-denied noise.
+		//  - >/dev/null 2>&1 on xargs: discard all cat output and errors.
+		prefetchCmd := `if [ -d "$__MODEL_PREFETCH_PATH" ]; then timeout 600 sh -c 'find "$__MODEL_PREFETCH_PATH" -type f -print0 2>/dev/null | xargs -0 -r -P 4 cat >/dev/null 2>&1'; fi`
+		if container.Lifecycle == nil {
+			container.Lifecycle = &corev1.Lifecycle{}
+		}
+		container.Lifecycle.PostStart = &corev1.LifecycleHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"/bin/sh", "-c", prefetchCmd},
+			},
+		}
+	}
+
+	// 7. Extract port and build metadata
 	var resolvedPort int32
 	for _, cp := range podTemplate.Spec.Containers[0].Ports {
 		if cp.Name == "http" {
@@ -405,7 +552,7 @@ func generateRBG(name, modelID, namespace string, p RunParams, userCfg *cliconfi
 		Port:     resolvedPort,
 	}
 
-	// 7. Assemble RBG
+	// 8. Assemble RBG
 	rbg := assembleRBG(name, namespace, pattern, metadata, p.Replicas)
 
 	return rbg, metadata, nil
@@ -645,24 +792,29 @@ func testChatCompletionsWithReconnect(
 
 func newRunCmd(cf *genericclioptions.ConfigFlags) *cobra.Command {
 	var (
-		replicas        int32
-		mode            string
-		engine          string
-		image           string
-		envVars         []string
-		argsList        []string
-		storage         string
-		revision        string
-		modelPath       string
-		dryRun          bool
-		waitReady       bool
-		waitTimeout     time.Duration
-		testAPI         bool
-		testAPITimeout  time.Duration
-		localPort       int32
-		resources       []string
-		distributedSize int32
-		shmSize         string
+		replicas         int32
+		mode             string
+		engine           string
+		image            string
+		envVars          []string
+		argsList         []string
+		storage          string
+		revision         string
+		modelPath        string
+		dryRun           bool
+		waitReady        bool
+		waitTimeout      time.Duration
+		testAPI          bool
+		testAPITimeout   time.Duration
+		localPort        int32
+		resources        []string
+		distributedSize  int32
+		shmSize          string
+		modelPrefetch    bool
+		tolerations      []string
+		imagePullSecrets []string
+		hostNetwork      bool
+		nodeSelector     []string
 	)
 
 	cmd := &cobra.Command{
@@ -702,6 +854,16 @@ Examples:
   # Deploy a custom model without any model config
   kubectl rbg llm svc run my-model org/new-model --engine vllm --resource nvidia.com/gpu=1
 
+  # Use private registry with image pull secrets
+  kubectl rbg llm svc run my-qwen Qwen/Qwen3.5-0.8B --image-pull-secret my-registry-secret
+  kubectl rbg llm svc run my-qwen Qwen/Qwen3.5-0.8B --image-pull-secret secret-a --image-pull-secret secret-b
+
+  # Use host network
+  kubectl rbg llm svc run my-qwen Qwen/Qwen3.5-0.8B --host-network
+
+  # Schedule on specific nodes
+  kubectl rbg llm svc run my-qwen Qwen/Qwen3.5-0.8B --node-selector gpu-type=a100 --node-selector zone=us-east-1a
+
   # Dry run to preview the generated configuration
   kubectl rbg llm svc run my-qwen Qwen/Qwen3.5-0.8B --dry-run`,
 		Example: `  # Quick start with default config
@@ -726,19 +888,24 @@ Examples:
 
 			// Generate RBG (includes config resolution, pattern generation, storage mounting)
 			params := RunParams{
-				Mode:            mode,
-				Engine:          engine,
-				Image:           image,
-				Storage:         storage,
-				Revision:        revision,
-				ModelPath:       modelPath,
-				EnvVars:         envVars,
-				ArgsList:        argsList,
-				DryRun:          dryRun,
-				Replicas:        replicas,
-				Resources:       resources,
-				DistributedSize: distributedSize,
-				ShmSize:         shmSize,
+				Mode:             mode,
+				Engine:           engine,
+				Image:            image,
+				Storage:          storage,
+				Revision:         revision,
+				ModelPath:        modelPath,
+				EnvVars:          envVars,
+				ArgsList:         argsList,
+				DryRun:           dryRun,
+				Replicas:         replicas,
+				Resources:        resources,
+				DistributedSize:  distributedSize,
+				ShmSize:          shmSize,
+				ModelPrefetch:    modelPrefetch,
+				Tolerations:      tolerations,
+				ImagePullSecrets: imagePullSecrets,
+				HostNetwork:      hostNetwork,
+				NodeSelector:     nodeSelector,
 			}
 			rbg, metadata, err := generateRBG(name, modelID, namespace, params, userCfg, cf)
 			if err != nil {
@@ -822,6 +989,14 @@ Examples:
 	cmd.Flags().StringVar(&storage, "storage", "", "Storage to use (overrides default)")
 	cmd.Flags().StringVar(&revision, "revision", "main", "Model revision")
 	cmd.Flags().StringVar(&modelPath, "model-path", "", "Absolute model path inside the container. Storage is mounted at /models, so the default path is /models/<model>/<revision>")
+	cmd.Flags().BoolVar(&modelPrefetch, "model-prefetch", false, "Add a postStart lifecycle hook to prefetch model files into page cache. "+
+		"The hook runs synchronously (pod stays in ContainerCreating until it finishes). "+
+		"A 600s soft timeout is enforced to avoid kubelet hook-deadline restarts. "+
+		"Best suited for models under ~100 GB on fast storage; larger checkpoints may exceed the timeout")
+	cmd.Flags().StringArrayVar(&tolerations, "toleration", nil, "Pod tolerations (key=value:effect, key:effect, or key)")
+	cmd.Flags().StringArrayVar(&imagePullSecrets, "image-pull-secret", nil, "Image pull secret names for private registries (can be specified multiple times)")
+	cmd.Flags().BoolVar(&hostNetwork, "host-network", false, "Use host network for the pod")
+	cmd.Flags().StringArrayVar(&nodeSelector, "node-selector", nil, "Node selector labels (key=value, can be specified multiple times)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the generated template without creating the workload")
 	cmd.Flags().BoolVar(&waitReady, "wait", true, "Wait for the RoleBasedGroup to be ready before returning")
 	cmd.Flags().DurationVar(&waitTimeout, "wait-timeout", 20*time.Minute, "Timeout for waiting for RoleBasedGroup to be ready")

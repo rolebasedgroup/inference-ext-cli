@@ -70,11 +70,12 @@ type BenchmarkOptions struct {
 
 	extraArgs map[string]string
 
-	image         string
-	cpuRequest    string
-	cpuLimit      string
-	memoryRequest string
-	memoryLimit   string
+	image            string
+	imagePullSecrets []string
+	cpuRequest       string
+	cpuLimit         string
+	memoryRequest    string
+	memoryLimit      string
 
 	wait bool
 }
@@ -103,11 +104,12 @@ type BenchmarkConfig struct {
 
 	ExtraArgs map[string]string `json:"extraArgs,omitempty"`
 
-	Image         string `json:"image,omitempty"`
-	CPURequest    string `json:"cpuRequest,omitempty"`
-	CPULimit      string `json:"cpuLimit,omitempty"`
-	MemoryRequest string `json:"memoryRequest,omitempty"`
-	MemoryLimit   string `json:"memoryLimit,omitempty"`
+	Image            string   `json:"image,omitempty"`
+	ImagePullSecrets []string `json:"imagePullSecrets,omitempty"`
+	CPURequest       string   `json:"cpuRequest,omitempty"`
+	CPULimit         string   `json:"cpuLimit,omitempty"`
+	MemoryRequest    string   `json:"memoryRequest,omitempty"`
+	MemoryLimit      string   `json:"memoryLimit,omitempty"`
 
 	Wait *bool `json:"wait,omitempty"`
 }
@@ -195,6 +197,7 @@ version management.`,
 			"Defaults to the generated job name if not specified.")
 
 	cmd.Flags().StringVar(&benchmarkOpts.image, "image", benchmarkOpts.image, "Container image used for benchmark job")
+	cmd.Flags().StringArrayVar(&benchmarkOpts.imagePullSecrets, "image-pull-secret", nil, "Image pull secret names for private registries (can be specified multiple times)")
 	cmd.Flags().StringVar(&benchmarkOpts.cpuRequest, "cpu-request", benchmarkOpts.cpuRequest, "CPU request for benchmark pod")
 	cmd.Flags().StringVar(&benchmarkOpts.cpuLimit, "cpu-limit", benchmarkOpts.cpuLimit, "CPU limit for benchmark pod")
 	cmd.Flags().StringVar(&benchmarkOpts.memoryRequest, "memory-request", benchmarkOpts.memoryRequest, "Memory request for benchmark pod")
@@ -262,7 +265,7 @@ func getConflictingFlags(cmd *cobra.Command) []string {
 		"api-backend", "api-base", "api-port", "api-key", "api-model-name",
 		"model-tokenizer",
 		"experiment-base-dir", "experiment-folder-name",
-		"image", "cpu-request", "cpu-limit", "memory-request", "memory-limit",
+		"image", "image-pull-secret", "cpu-request", "cpu-limit", "memory-request", "memory-limit",
 		"wait", "extra-args",
 	}
 	var conflicting []string
@@ -291,6 +294,7 @@ func applyConfigToOptions(cfg *BenchmarkConfig, cmd *cobra.Command) {
 	setStringOpt(&benchmarkOpts.experimentBaseDir, cfg.ExperimentBaseDir, "experiment-base-dir", cmd)
 	setStringOpt(&benchmarkOpts.experimentFolderName, cfg.ExperimentFolderName, "experiment-folder-name", cmd)
 	setStringOpt(&benchmarkOpts.image, cfg.Image, "image", cmd)
+	setStringSliceOpt(&benchmarkOpts.imagePullSecrets, cfg.ImagePullSecrets, "image-pull-secret", cmd)
 	setStringOpt(&benchmarkOpts.cpuRequest, cfg.CPURequest, "cpu-request", cmd)
 	setStringOpt(&benchmarkOpts.cpuLimit, cfg.CPULimit, "cpu-limit", cmd)
 	setStringOpt(&benchmarkOpts.memoryRequest, cfg.MemoryRequest, "memory-request", cmd)

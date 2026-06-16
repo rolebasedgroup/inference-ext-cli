@@ -53,6 +53,7 @@ type DashboardOptions struct {
 	localPort         int
 	openBrowser       bool
 	image             string
+	imagePullSecrets  []string
 }
 
 var dashboardOpts DashboardOptions
@@ -99,6 +100,8 @@ Press Ctrl+C to stop the dashboard and clean up resources.`,
 		"Automatically open browser after dashboard is ready")
 	cmd.Flags().StringVar(&dashboardOpts.image, "image", defaultDashboardImage,
 		"Container image for the benchmark dashboard")
+	cmd.Flags().StringArrayVar(&dashboardOpts.imagePullSecrets, "image-pull-secret", nil,
+		"Image pull secret names for private registries (can be specified multiple times)")
 
 	return cmd
 }
@@ -126,7 +129,10 @@ func runDashboard(ctx context.Context) error {
 	}
 
 	// Build and create the dashboard Pod
-	pod := buildDashboardPod(ns, pvcComponents)
+	pod, err := buildDashboardPod(ns, pvcComponents)
+	if err != nil {
+		return err
+	}
 	createdPod, err := clientset.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create dashboard pod: %w", err)

@@ -27,6 +27,8 @@ func init() {
 	})
 }
 
+const DefaultModelScopeImage = "rolebasedgroup/model-downloader-modelscope:v0.0.1"
+
 // ModelScopeSource implements the SourcePlugin interface for ModelScope
 type ModelScopeSource struct {
 	Token       string
@@ -83,7 +85,7 @@ func (m *ModelScopeSource) GenerateTemplateWithRevision(modelID string, modelPat
 	}
 
 	// Build download command using environment variables to prevent command injection
-	downloadCmd := "pip install modelscope -q && modelscope download --model \"$MODEL_ID\" --local_dir \"$MODEL_PATH\""
+	downloadCmd := "modelscope download --model \"$MODEL_ID\" --local_dir \"$MODEL_PATH\""
 	if revision != "" && revision != "main" {
 		env = append(env, corev1.EnvVar{Name: "REVISION", Value: revision})
 		downloadCmd += " --revision \"$REVISION\""
@@ -94,7 +96,7 @@ func (m *ModelScopeSource) GenerateTemplateWithRevision(modelID string, modelPat
 			Containers: []corev1.Container{
 				{
 					Name:    "download",
-					Image:   "python:3.11-slim",
+					Image:   DefaultModelScopeImage,
 					Command: []string{"/bin/sh", "-c"},
 					Args:    []string{downloadCmd},
 					Env:     env,

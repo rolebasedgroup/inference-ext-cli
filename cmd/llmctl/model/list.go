@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/rbgs/cli/cmd/llmctl/shared"
 	"sigs.k8s.io/rbgs/cli/pkg/config"
 	storageplugin "sigs.k8s.io/rbgs/cli/pkg/plugin/storage"
 	"sigs.k8s.io/rbgs/cli/pkg/util"
@@ -36,7 +37,9 @@ import (
 
 func newListCmd(cf *genericclioptions.ConfigFlags) *cobra.Command {
 	var (
-		storage string
+		storage          string
+		image            string
+		imagePullSecrets []string
 	)
 
 	cmd := &cobra.Command{
@@ -94,7 +97,10 @@ Examples:
 			}
 
 			// Create a job to scan storage and list models
-			job := buildListModelsJob(storageplugin.DefaultMountPath)
+			job, err := buildListModelsJob(storageplugin.DefaultMountPath, image, imagePullSecrets)
+			if err != nil {
+				return err
+			}
 
 			// Mount storage (provisions resources for OSS and adds volumes/mounts)
 			ctrlClient, err := util.GetControllerRuntimeClient(cf)
@@ -141,12 +147,16 @@ Examples:
 	}
 
 	cmd.Flags().StringVar(&storage, "storage", "", "Storage to use (overrides default)")
+	cmd.Flags().StringVar(&image, "image", defaultListImage, "Container image for the list job")
+	cmd.Flags().StringArrayVar(&imagePullSecrets, "image-pull-secret", nil, "Image pull secret names for private registries (can be specified multiple times)")
 
 	return cmd
 }
 
+const defaultListImage = "alpine:3.21"
+
 // buildListModelsJob creates a Job to scan storage and list models
-func buildListModelsJob(mountPath string) *batchv1.Job {
+func buildListModelsJob(mountPath, image string, imagePullSecrets []string) (*batchv1.Job, error) {
 	timestamp := time.Now().Unix()
 	jobName := fmt.Sprintf("list-models-%d", timestamp)
 
@@ -198,7 +208,7 @@ echo "]" >> "$OUTPUT_FILE"
 cat "$OUTPUT_FILE"
 `, mountPath)
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   jobName,
 			Labels: labels,
@@ -215,7 +225,7 @@ cat "$OUTPUT_FILE"
 					Containers: []corev1.Container{
 						{
 							Name:    "scanner",
-							Image:   "alpine:latest",
+							Image:   image,
 							Command: []string{"/bin/sh", "-c"},
 							Args:    []string{scanScript},
 						},
@@ -225,6 +235,16 @@ cat "$OUTPUT_FILE"
 			},
 		},
 	}
+
+	imagePullSecretRefs, err := shared.ToImagePullSecrets(imagePullSecrets)
+	if err != nil {
+		return nil, err
+	}
+	if len(imagePullSecretRefs) > 0 {
+		job.Spec.Template.Spec.ImagePullSecrets = imagePullSecretRefs
+	}
+
+	return job, nil
 }
 
 // getJobOutput retrieves the output from the job's pod

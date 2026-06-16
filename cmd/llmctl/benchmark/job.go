@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/rbgs/api/workloads/constants"
+	"sigs.k8s.io/rbgs/cli/cmd/llmctl/shared"
 )
 
 const (
@@ -132,6 +133,14 @@ func buildBenchmarkJob(namespace, rbgName string) (*batchv1.Job, error) {
 		RestartPolicy: corev1.RestartPolicyNever,
 	}
 
+	imagePullSecretRefs, err := shared.ToImagePullSecrets(benchmarkOpts.imagePullSecrets)
+	if err != nil {
+		return nil, err
+	}
+	if len(imagePullSecretRefs) > 0 {
+		podSpec.ImagePullSecrets = imagePullSecretRefs
+	}
+
 	backoffLimit := int32(0)
 	ttlSecondsAfterFinished := int32(604800) // 7 days
 
@@ -178,6 +187,7 @@ func buildBenchmarkAnnotations() (map[string]string, error) {
 		ExperimentFolderName: benchmarkOpts.experimentFolderName,
 		ExtraArgs:            benchmarkOpts.extraArgs,
 		Image:                benchmarkOpts.image,
+		ImagePullSecrets:     benchmarkOpts.imagePullSecrets,
 		CPURequest:           benchmarkOpts.cpuRequest,
 		CPULimit:             benchmarkOpts.cpuLimit,
 		MemoryRequest:        benchmarkOpts.memoryRequest,

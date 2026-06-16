@@ -38,7 +38,8 @@ func TestBuildDashboardPod(t *testing.T) {
 			PVCName: "benchmark-pvc",
 		}
 
-		pod := buildDashboardPod("test-ns", pvc)
+		pod, err := buildDashboardPod("test-ns", pvc)
+		require.NoError(t, err)
 
 		assert.Equal(t, "test-ns", pod.Namespace)
 		assert.Equal(t, "rbg-benchmark-dashboard-", pod.GenerateName)
@@ -91,7 +92,8 @@ func TestBuildDashboardPod(t *testing.T) {
 			SubPath: "experiments/run1",
 		}
 
-		pod := buildDashboardPod("test-ns", pvc)
+		pod, err := buildDashboardPod("test-ns", pvc)
+		require.NoError(t, err)
 
 		require.Len(t, pod.Spec.Containers, 1)
 		require.Len(t, pod.Spec.Containers[0].VolumeMounts, 1)
