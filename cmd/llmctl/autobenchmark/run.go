@@ -31,17 +31,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
+	"sigs.k8s.io/rbgs/cli/cmd/llmctl/shared"
 	"sigs.k8s.io/rbgs/cli/pkg/autobenchmark/config"
 	"sigs.k8s.io/rbgs/cli/pkg/autobenchmark/constant"
 	"sigs.k8s.io/rbgs/cli/pkg/util"
 )
 
 type runOptions struct {
-	cf             *genericclioptions.ConfigFlags
-	configFile     string
-	name           string
-	image          string
-	serviceAccount string
+	cf               *genericclioptions.ConfigFlags
+	configFile       string
+	name             string
+	image            string
+	serviceAccount   string
+	imagePullSecrets []string
 }
 
 func newRunCmd(cf *genericclioptions.ConfigFlags) *cobra.Command {
@@ -67,6 +69,7 @@ See the guide for RBAC setup instructions.`,
 	cmd.Flags().StringVar(&opts.name, "name", "", "Experiment name (defaults to auto-generated name from config)")
 	cmd.Flags().StringVar(&opts.image, "image", controllerImage, "Controller image")
 	cmd.Flags().StringVar(&opts.serviceAccount, "service-account", "", "ServiceAccount for the controller Job (required)")
+	cmd.Flags().StringArrayVar(&opts.imagePullSecrets, "image-pull-secret", nil, "Image pull secret names for private registries (can be specified multiple times)")
 	_ = cmd.MarkFlagRequired("config")
 	_ = cmd.MarkFlagRequired("service-account")
 
@@ -170,6 +173,11 @@ func (o *runOptions) run(ctx context.Context) error {
 	backoffLimit := int32(0)
 	ttl := int32(86400 * 7) // 7 days
 
+	imagePullSecretRefs, err := shared.ToImagePullSecrets(o.imagePullSecrets)
+	if err != nil {
+		return err
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -187,6 +195,7 @@ func (o *runOptions) run(ctx context.Context) error {
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					ServiceAccountName: o.serviceAccount,
+					ImagePullSecrets:   imagePullSecretRefs,
 					RestartPolicy:      corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{

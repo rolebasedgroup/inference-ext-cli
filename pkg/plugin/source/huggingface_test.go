@@ -80,7 +80,7 @@ func TestHuggingFaceSource_GenerateTemplate_NoAuth(t *testing.T) {
 
 	c := tpl.Spec.Containers[0]
 	assert.Equal(t, "download", c.Name)
-	assert.Equal(t, "python:3.11-slim", c.Image)
+	assert.Equal(t, DefaultHuggingFaceImage, c.Image)
 	assert.Equal(t, []string{"/bin/sh", "-c"}, c.Command)
 
 	// Verify environment variables are set instead of string concatenation

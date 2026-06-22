@@ -38,15 +38,19 @@ type ModelConfig struct {
 
 // ModeConfig describes a single run mode for a model.
 type ModeConfig struct {
-	Name        string              `yaml:"name"`
-	Description string              `yaml:"description"`
-	Engine      string              `yaml:"engine"`
-	Image       string              `yaml:"image"`
-	Resources   corev1.ResourceList `yaml:"resources"`
-	Args        []string            `yaml:"args"`
-	Env         []corev1.EnvVar     `yaml:"env"`
-	Distributed *DistributedConfig  `yaml:"distributed,omitempty"` // Multi-node deployment config
-	ShmSize     string              `yaml:"shmSize,omitempty"`     // Shared memory size (e.g., "8Gi", "16Gi")
+	Name             string              `yaml:"name"`
+	Description      string              `yaml:"description"`
+	Engine           string              `yaml:"engine"`
+	Image            string              `yaml:"image"`
+	Resources        corev1.ResourceList `yaml:"resources"`
+	Args             []string            `yaml:"args"`
+	Env              []corev1.EnvVar     `yaml:"env"`
+	Distributed      *DistributedConfig  `yaml:"distributed,omitempty"`      // Multi-node deployment config
+	ShmSize          string              `yaml:"shmSize,omitempty"`          // Shared memory size (e.g., "8Gi", "16Gi")
+	Tolerations      []corev1.Toleration `yaml:"tolerations,omitempty"`      // Pod tolerations for node scheduling
+	ImagePullSecrets []string            `yaml:"imagePullSecrets,omitempty"` // Image pull secret names for private registries
+	HostNetwork      bool                `yaml:"hostNetwork,omitempty"`      // Use host network for the pod
+	NodeSelector     map[string]string   `yaml:"nodeSelector,omitempty"`     // Node selector labels for pod scheduling
 
 	// Source indicates where this mode was defined ("builtin" or config filename).
 	// Populated by LoadAllModels; excluded from YAML/JSON serialization.
@@ -149,6 +153,19 @@ func copyMode(mode ModeConfig, source string) ModeConfig {
 	if mode.Distributed != nil {
 		d := *mode.Distributed
 		mode.Distributed = &d
+	}
+	if mode.Tolerations != nil {
+		mode.Tolerations = append([]corev1.Toleration(nil), mode.Tolerations...)
+	}
+	if mode.ImagePullSecrets != nil {
+		mode.ImagePullSecrets = append([]string(nil), mode.ImagePullSecrets...)
+	}
+	if mode.NodeSelector != nil {
+		ns := make(map[string]string, len(mode.NodeSelector))
+		for k, v := range mode.NodeSelector {
+			ns[k] = v
+		}
+		mode.NodeSelector = ns
 	}
 	return mode
 }

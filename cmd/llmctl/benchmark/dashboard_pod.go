@@ -21,10 +21,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"sigs.k8s.io/rbgs/cli/cmd/llmctl/shared"
 )
 
 // buildDashboardPod creates a Pod specification for the benchmark results dashboard.
-func buildDashboardPod(namespace string, pvcComponents *PVCComponents) *corev1.Pod {
+func buildDashboardPod(namespace string, pvcComponents *PVCComponents) (*corev1.Pod, error) {
 	labels := map[string]string{
 		dashboardLabelKey: dashboardLabelValue,
 	}
@@ -38,7 +40,7 @@ func buildDashboardPod(namespace string, pvcComponents *PVCComponents) *corev1.P
 		volumeMount.SubPath = pvcComponents.SubPath
 	}
 
-	return &corev1.Pod{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "rbg-benchmark-dashboard-",
 			Namespace:    namespace,
@@ -94,4 +96,14 @@ func buildDashboardPod(namespace string, pvcComponents *PVCComponents) *corev1.P
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
+
+	imagePullSecretRefs, err := shared.ToImagePullSecrets(dashboardOpts.imagePullSecrets)
+	if err != nil {
+		return nil, err
+	}
+	if len(imagePullSecretRefs) > 0 {
+		pod.Spec.ImagePullSecrets = imagePullSecretRefs
+	}
+
+	return pod, nil
 }

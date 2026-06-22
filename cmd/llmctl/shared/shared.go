@@ -21,6 +21,7 @@ import (
 	"os"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 
 	workloadsv1alpha2 "sigs.k8s.io/rbgs/api/workloads/v1alpha2"
@@ -33,6 +34,23 @@ func SanitizeModelID(modelID string) string {
 	result = strings.ReplaceAll(result, "_", "-")
 	result = strings.ToLower(result)
 	return result
+}
+
+// ToImagePullSecrets converts a string slice of secret names into
+// Kubernetes LocalObjectReference values. It returns an error if any
+// name is empty or whitespace-only.
+func ToImagePullSecrets(names []string) ([]corev1.LocalObjectReference, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	refs := make([]corev1.LocalObjectReference, 0, len(names))
+	for _, name := range names {
+		if strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("image pull secret name must not be empty")
+		}
+		refs = append(refs, corev1.LocalObjectReference{Name: name})
+	}
+	return refs, nil
 }
 
 // PrintRBG prints a v1alpha2 RoleBasedGroup as YAML.

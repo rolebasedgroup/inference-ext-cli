@@ -27,15 +27,19 @@ import (
 
 // GenerateOptions contains all information needed to generate a pod template.
 type GenerateOptions struct {
-	Name            string
-	ModelID         string
-	ModelPath       string
-	Image           string          // Override image (empty to use default)
-	Args            []string        // Additional arguments
-	Env             []corev1.EnvVar // Additional environment variables
-	Resources       corev1.ResourceRequirements
-	DistributedSize int32  // Multi-node deployment size, <=1 means standalone
-	ShmSize         string // Shared memory size (e.g., "8Gi", "16Gi"), empty means no shared memory
+	Name             string
+	ModelID          string
+	ModelPath        string
+	Image            string          // Override image (empty to use default)
+	Args             []string        // Additional arguments
+	Env              []corev1.EnvVar // Additional environment variables
+	Resources        corev1.ResourceRequirements
+	DistributedSize  int32  // Multi-node deployment size, <=1 means standalone
+	ShmSize          string // Shared memory size (e.g., "8Gi", "16Gi"), empty means no shared memory
+	Tolerations      []corev1.Toleration
+	ImagePullSecrets []corev1.LocalObjectReference
+	HostNetwork      bool
+	NodeSelector     map[string]string
 }
 
 // Plugin defines the interface for inference engines.

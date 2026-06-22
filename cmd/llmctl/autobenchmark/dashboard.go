@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
+	"sigs.k8s.io/rbgs/cli/cmd/llmctl/shared"
 	"sigs.k8s.io/rbgs/cli/pkg/autobenchmark/config"
 	"sigs.k8s.io/rbgs/cli/pkg/autobenchmark/constant"
 	"sigs.k8s.io/rbgs/cli/pkg/util"
@@ -50,11 +51,12 @@ const (
 )
 
 type dashboardOptions struct {
-	cf         *genericclioptions.ConfigFlags
-	configFile string
-	name       string
-	image      string
-	localPort  int
+	cf               *genericclioptions.ConfigFlags
+	configFile       string
+	name             string
+	image            string
+	imagePullSecrets []string
+	localPort        int
 }
 
 func newDashboardCmd(cf *genericclioptions.ConfigFlags) *cobra.Command {
@@ -83,6 +85,7 @@ If [name] is provided, it overrides the experiment name from the config file.`,
 
 	cmd.Flags().StringVarP(&opts.configFile, "config", "f", "", "Path to auto-benchmark config file (required)")
 	cmd.Flags().StringVar(&opts.image, "image", dashboardImage, "Dashboard container image")
+	cmd.Flags().StringArrayVar(&opts.imagePullSecrets, "image-pull-secret", nil, "Image pull secret names for private registries (can be specified multiple times)")
 	cmd.Flags().IntVarP(&opts.localPort, "port", "p", defaultLocalPort, "Local port for port-forward")
 	_ = cmd.MarkFlagRequired("config")
 
@@ -178,6 +181,15 @@ func (o *dashboardOptions) run(ctx context.Context) error {
 				},
 			},
 		},
+	}
+
+	// Apply image pull secrets
+	imagePullSecretRefs, err := shared.ToImagePullSecrets(o.imagePullSecrets)
+	if err != nil {
+		return err
+	}
+	if len(imagePullSecretRefs) > 0 {
+		deploy.Spec.Template.Spec.ImagePullSecrets = append(deploy.Spec.Template.Spec.ImagePullSecrets, imagePullSecretRefs...)
 	}
 
 	// Delete existing if present, then create

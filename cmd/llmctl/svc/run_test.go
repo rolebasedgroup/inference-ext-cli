@@ -24,6 +24,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
@@ -469,4 +470,365 @@ func TestNewRunCmd_NewFlagDefaults(t *testing.T) {
 	shmFlag := cmd.Flags().Lookup("shm-size")
 	require.NotNil(t, shmFlag)
 	assert.Equal(t, "", shmFlag.DefValue)
+
+	tolFlag := cmd.Flags().Lookup("toleration")
+	require.NotNil(t, tolFlag)
+}
+
+func TestParseToleration(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantKey   string
+		wantValue string
+		wantOp    corev1.TolerationOperator
+		wantEff   corev1.TaintEffect
+		wantErr   bool
+	}{
+		{
+			name:    "key=value:NoSchedule (Equal)",
+			input:   "gpu-type=a100:NoSchedule",
+			wantKey: "gpu-type", wantValue: "a100",
+			wantOp: corev1.TolerationOpEqual, wantEff: corev1.TaintEffectNoSchedule,
+		},
+		{
+			name:    "key:NoSchedule (Exists)",
+			input:   "node-role.alibabacloud.com/lingjun:NoSchedule",
+			wantKey: "node-role.alibabacloud.com/lingjun",
+			wantOp:  corev1.TolerationOpExists, wantEff: corev1.TaintEffectNoSchedule,
+		},
+		{
+			name:    "key:NoExecute",
+			input:   "dedicated:NoExecute",
+			wantKey: "dedicated",
+			wantOp:  corev1.TolerationOpExists, wantEff: corev1.TaintEffectNoExecute,
+		},
+		{
+			name:    "key:PreferNoSchedule",
+			input:   "special:PreferNoSchedule",
+			wantKey: "special",
+			wantOp:  corev1.TolerationOpExists, wantEff: corev1.TaintEffectPreferNoSchedule,
+		},
+		{
+			name:    "key only (all effects)",
+			input:   "my-key",
+			wantKey: "my-key",
+			wantOp:  corev1.TolerationOpExists, wantEff: "",
+		},
+		{
+			name:      "key=value without effect",
+			input:     "gpu-type=a100",
+			wantKey:   "gpu-type",
+			wantValue: "a100",
+			wantOp:    corev1.TolerationOpEqual, wantEff: "",
+		},
+		{
+			name:    "invalid effect",
+			input:   "key:InvalidEffect",
+			wantErr: true,
+		},
+		{
+			name:    "empty string",
+			input:   "",
+			wantErr: true,
+		},
+		{
+			name:    "empty key with effect",
+			input:   ":NoSchedule",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseToleration(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantKey, got.Key)
+			assert.Equal(t, tt.wantValue, got.Value)
+			assert.Equal(t, tt.wantOp, got.Operator)
+			assert.Equal(t, tt.wantEff, got.Effect)
+		})
+	}
+}
+
+func TestGenerateRBG_Toleration(t *testing.T) {
+	rbg, _, err := generateRBG("my-svc", "Qwen/Qwen3.5-0.8B", "default", RunParams{
+		Tolerations: []string{
+			"node-role.alibabacloud.com/lingjun:NoSchedule",
+			"gpu-type=a100:NoSchedule",
+		},
+		Revision: "main",
+		Replicas: 1,
+		DryRun:   true,
+	}, nil, nil)
+	require.NoError(t, err)
+
+	podTemplate := getPodTemplateFromPattern(&rbg.Spec.Roles[0].Pattern)
+	require.Len(t, podTemplate.Spec.Tolerations, 2)
+
+	tol0 := podTemplate.Spec.Tolerations[0]
+	assert.Equal(t, "node-role.alibabacloud.com/lingjun", tol0.Key)
+	assert.Equal(t, corev1.TolerationOpExists, tol0.Operator)
+	assert.Equal(t, corev1.TaintEffectNoSchedule, tol0.Effect)
+
+	tol1 := podTemplate.Spec.Tolerations[1]
+	assert.Equal(t, "gpu-type", tol1.Key)
+	assert.Equal(t, "a100", tol1.Value)
+	assert.Equal(t, corev1.TolerationOpEqual, tol1.Operator)
+	assert.Equal(t, corev1.TaintEffectNoSchedule, tol1.Effect)
+}
+
+// --- imagePullSecrets ---
+
+func TestGenerateRBG_ImagePullSecrets(t *testing.T) {
+	tests := []struct {
+		name    string
+		secrets []string
+		want    []corev1.LocalObjectReference
+		wantErr string
+	}{
+		{
+			name:    "single secret",
+			secrets: []string{"my-registry-secret"},
+			want:    []corev1.LocalObjectReference{{Name: "my-registry-secret"}},
+		},
+		{
+			name:    "multiple secrets",
+			secrets: []string{"secret-a", "secret-b"},
+			want:    []corev1.LocalObjectReference{{Name: "secret-a"}, {Name: "secret-b"}},
+		},
+		{
+			name:    "no secrets",
+			secrets: nil,
+			want:    nil,
+		},
+		{
+			name:    "empty string rejected",
+			secrets: []string{""},
+			wantErr: "image pull secret name must not be empty",
+		},
+		{
+			name:    "whitespace-only rejected",
+			secrets: []string{"  "},
+			wantErr: "image pull secret name must not be empty",
+		},
+		{
+			name:    "valid then empty rejected",
+			secrets: []string{"good-secret", ""},
+			wantErr: "image pull secret name must not be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rbg, _, err := generateRBG("my-svc", "Qwen/Qwen3.5-0.8B", "default", RunParams{
+				ImagePullSecrets: tt.secrets,
+				Revision:         "main",
+				Replicas:         1,
+				DryRun:           true,
+			}, nil, nil)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			podTemplate := getPodTemplateFromPattern(&rbg.Spec.Roles[0].Pattern)
+			if tt.want == nil {
+				assert.Empty(t, podTemplate.Spec.ImagePullSecrets)
+			} else {
+				assert.Equal(t, tt.want, podTemplate.Spec.ImagePullSecrets)
+			}
+		})
+	}
+}
+
+// --- hostNetwork ---
+
+func TestGenerateRBG_HostNetwork(t *testing.T) {
+	tests := []struct {
+		name        string
+		hostNetwork bool
+		want        bool
+	}{
+		{
+			name:        "host network enabled",
+			hostNetwork: true,
+			want:        true,
+		},
+		{
+			name:        "host network disabled (default)",
+			hostNetwork: false,
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rbg, _, err := generateRBG("my-svc", "Qwen/Qwen3.5-0.8B", "default", RunParams{
+				HostNetwork: tt.hostNetwork,
+				Revision:    "main",
+				Replicas:    1,
+				DryRun:      true,
+			}, nil, nil)
+			require.NoError(t, err)
+
+			podTemplate := getPodTemplateFromPattern(&rbg.Spec.Roles[0].Pattern)
+			assert.Equal(t, tt.want, podTemplate.Spec.HostNetwork)
+		})
+	}
+}
+
+// --- nodeSelector ---
+
+func TestGenerateRBG_NodeSelector(t *testing.T) {
+	tests := []struct {
+		name         string
+		nodeSelector []string
+		want         map[string]string
+		wantErr      string
+	}{
+		{
+			name:         "single label",
+			nodeSelector: []string{"gpu-type=a100"},
+			want:         map[string]string{"gpu-type": "a100"},
+		},
+		{
+			name:         "multiple labels",
+			nodeSelector: []string{"gpu-type=a100", "zone=us-east-1a"},
+			want:         map[string]string{"gpu-type": "a100", "zone": "us-east-1a"},
+		},
+		{
+			name:         "empty value allowed",
+			nodeSelector: []string{"dedicated="},
+			want:         map[string]string{"dedicated": ""},
+		},
+		{
+			name:         "no node selector",
+			nodeSelector: nil,
+			want:         nil,
+		},
+		{
+			name:         "invalid: missing equals",
+			nodeSelector: []string{"noequalssign"},
+			wantErr:      "invalid node-selector format",
+		},
+		{
+			name:         "invalid: empty key",
+			nodeSelector: []string{"=value"},
+			wantErr:      "invalid node-selector format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rbg, _, err := generateRBG("my-svc", "Qwen/Qwen3.5-0.8B", "default", RunParams{
+				NodeSelector: tt.nodeSelector,
+				Revision:     "main",
+				Replicas:     1,
+				DryRun:       true,
+			}, nil, nil)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			podTemplate := getPodTemplateFromPattern(&rbg.Spec.Roles[0].Pattern)
+			if tt.want == nil {
+				assert.Empty(t, podTemplate.Spec.NodeSelector)
+			} else {
+				assert.Equal(t, tt.want, podTemplate.Spec.NodeSelector)
+			}
+		})
+	}
+}
+
+// --- modelPrefetch ---
+
+func TestGenerateRBG_ModelPrefetch(t *testing.T) {
+	tests := []struct {
+		name          string
+		modelPrefetch bool
+		modelPath     string
+	}{
+		{
+			name:          "prefetch enabled with default path",
+			modelPrefetch: true,
+		},
+		{
+			name:          "prefetch enabled with custom path",
+			modelPrefetch: true,
+			modelPath:     "/custom/model/path",
+		},
+		{
+			name:          "prefetch disabled",
+			modelPrefetch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rbg, _, err := generateRBG("my-svc", "Qwen/Qwen3.5-0.8B", "default", RunParams{
+				ModelPrefetch: tt.modelPrefetch,
+				ModelPath:     tt.modelPath,
+				Revision:      "main",
+				Replicas:      1,
+				DryRun:        true,
+			}, nil, nil)
+			require.NoError(t, err)
+
+			podTemplate := getPodTemplateFromPattern(&rbg.Spec.Roles[0].Pattern)
+			container := podTemplate.Spec.Containers[0]
+
+			if !tt.modelPrefetch {
+				// No lifecycle hook should be set
+				if container.Lifecycle != nil {
+					assert.Nil(t, container.Lifecycle.PostStart)
+				}
+				// No __MODEL_PREFETCH_PATH env var
+				for _, env := range container.Env {
+					assert.NotEqual(t, "__MODEL_PREFETCH_PATH", env.Name)
+				}
+				return
+			}
+
+			// Lifecycle PostStart hook must be set
+			require.NotNil(t, container.Lifecycle)
+			require.NotNil(t, container.Lifecycle.PostStart)
+			require.NotNil(t, container.Lifecycle.PostStart.Exec)
+			assert.Equal(t, "/bin/sh", container.Lifecycle.PostStart.Exec.Command[0])
+			assert.Equal(t, "-c", container.Lifecycle.PostStart.Exec.Command[1])
+
+			// Verify the command includes timeout and the safe xargs idiom
+			cmd := container.Lifecycle.PostStart.Exec.Command[2]
+			assert.Contains(t, cmd, "timeout 600")
+			assert.Contains(t, cmd, "$__MODEL_PREFETCH_PATH")
+			assert.Contains(t, cmd, "xargs -0 -r -P 4 cat >/dev/null 2>&1")
+
+			// __MODEL_PREFETCH_PATH env var must be set with correct path
+			var prefetchEnv *corev1.EnvVar
+			for i := range container.Env {
+				if container.Env[i].Name == "__MODEL_PREFETCH_PATH" {
+					prefetchEnv = &container.Env[i]
+					break
+				}
+			}
+			require.NotNil(t, prefetchEnv, "expected __MODEL_PREFETCH_PATH env var")
+			if tt.modelPath != "" {
+				assert.Equal(t, tt.modelPath, prefetchEnv.Value)
+			} else {
+				// Default path should start with /model/
+				assert.True(t, strings.HasPrefix(prefetchEnv.Value, "/model/"),
+					"expected default model path, got: %s", prefetchEnv.Value)
+			}
+		})
+	}
 }

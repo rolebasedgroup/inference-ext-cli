@@ -45,38 +45,44 @@ func TestInt64Ptr(t *testing.T) {
 // --- buildListModelsJob ---
 
 func TestBuildListModelsJob_NamePrefix(t *testing.T) {
-	job := buildListModelsJob("/models")
+	job, err := buildListModelsJob("/models", defaultListImage, nil)
+	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(job.Name, "list-models-"), "job name should start with list-models-")
 }
 
 func TestBuildListModelsJob_Labels(t *testing.T) {
-	job := buildListModelsJob("/models")
+	job, err := buildListModelsJob("/models", defaultListImage, nil)
+	require.NoError(t, err)
 	assert.Equal(t, "true", job.Labels["rbg-list-job"])
 }
 
 func TestBuildListModelsJob_ContainerSpec(t *testing.T) {
-	job := buildListModelsJob("/data/models")
+	job, err := buildListModelsJob("/models", defaultListImage, nil)
+	require.NoError(t, err)
 	require.Len(t, job.Spec.Template.Spec.Containers, 1)
 	c := job.Spec.Template.Spec.Containers[0]
 	assert.Equal(t, "scanner", c.Name)
-	assert.Equal(t, "alpine:latest", c.Image)
+	assert.Equal(t, defaultListImage, c.Image)
 	assert.Equal(t, []string{"/bin/sh", "-c"}, c.Command)
 }
 
 func TestBuildListModelsJob_ScriptContainsMountPath(t *testing.T) {
-	job := buildListModelsJob("/custom/path")
+	job, err := buildListModelsJob("/custom/path", defaultListImage, nil)
+	require.NoError(t, err)
 	args := job.Spec.Template.Spec.Containers[0].Args
 	require.Len(t, args, 1)
 	assert.Contains(t, args[0], "/custom/path")
 }
 
 func TestBuildListModelsJob_RestartPolicy(t *testing.T) {
-	job := buildListModelsJob("/models")
+	job, err := buildListModelsJob("/models", defaultListImage, nil)
+	require.NoError(t, err)
 	assert.Equal(t, corev1.RestartPolicyNever, job.Spec.Template.Spec.RestartPolicy)
 }
 
 func TestBuildListModelsJob_Limits(t *testing.T) {
-	job := buildListModelsJob("/models")
+	job, err := buildListModelsJob("/models", defaultListImage, nil)
+	require.NoError(t, err)
 	assert.Equal(t, int32(2), *job.Spec.BackoffLimit)
 	assert.Equal(t, int64(300), *job.Spec.ActiveDeadlineSeconds)
 	assert.Equal(t, int32(60), *job.Spec.TTLSecondsAfterFinished)
