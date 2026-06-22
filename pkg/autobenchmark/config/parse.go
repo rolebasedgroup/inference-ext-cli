@@ -144,6 +144,9 @@ func validateScenario(cfg *AutoBenchmarkConfig) []string {
 	} else if err := ValidateWorkload(cfg.Scenario.Workload); err != nil {
 		errs = append(errs, fmt.Sprintf("scenario.workload: %v", err))
 	}
+	if cfg.Scenario.MaxRequests < 0 {
+		errs = append(errs, "scenario.maxRequests: must not be negative (0 means use tool default)")
+	}
 	if cfg.Scenario.Concurrency <= 0 {
 		errs = append(errs, "scenario.concurrency: must be positive")
 	}
@@ -180,6 +183,24 @@ func validateStrategy(cfg *AutoBenchmarkConfig) []string {
 			errs = append(errs, fmt.Sprintf("strategy.timeout: invalid duration: %v", err))
 		}
 	}
+
+	et := cfg.Strategy.EarlyTermination
+	if et.MaxConsecutiveSLAFailures < 0 {
+		errs = append(errs, "strategy.earlyTermination.maxConsecutiveSLAFailures: must not be negative")
+	}
+	if et.MaxConsecutiveErrors != nil && *et.MaxConsecutiveErrors < 0 {
+		errs = append(errs, "strategy.earlyTermination.maxConsecutiveErrors: must not be negative")
+	}
+	if et.MaxSLAFailureRate < 0 || et.MaxSLAFailureRate > 1 {
+		errs = append(errs, "strategy.earlyTermination.maxSLAFailureRate: must be in [0, 1]")
+	}
+	if et.MinTrials < 0 {
+		errs = append(errs, "strategy.earlyTermination.minTrials: must not be negative")
+	}
+	if et.MinTrials > 0 && et.MinTrials > cfg.Strategy.MaxTrialsPerTemplate {
+		errs = append(errs, "strategy.earlyTermination.minTrials: must not exceed strategy.maxTrialsPerTemplate")
+	}
+
 	return errs
 }
 
@@ -273,6 +294,10 @@ func setDefaults(cfg *AutoBenchmarkConfig) error {
 	}
 	if cfg.Execution.TrialTimeout == "" {
 		cfg.Execution.TrialTimeout = "30m"
+	}
+	if cfg.Strategy.EarlyTermination.MaxConsecutiveErrors == nil {
+		var defaultMaxConsecutiveErrors = 3
+		cfg.Strategy.EarlyTermination.MaxConsecutiveErrors = &defaultMaxConsecutiveErrors
 	}
 	return nil
 }

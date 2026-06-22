@@ -110,10 +110,41 @@ type StrategySpec struct {
 	MaxTrialsPerTemplate int    `yaml:"maxTrialsPerTemplate" json:"maxTrialsPerTemplate"`
 	Timeout              string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 
+	// EarlyTermination configures conditions under which the trial loop for a
+	// template is stopped before exhausting all trials.
+	EarlyTermination EarlyTerminationSpec `yaml:"earlyTermination,omitempty" json:"earlyTermination,omitempty"`
+
 	// Optuna-specific fields (used when algorithm is an Optuna-backed sampler).
 	Seed            *int                   `yaml:"seed,omitempty" json:"seed,omitempty"`                       // RNG seed for reproducibility
 	StoragePath     string                 `yaml:"storagePath,omitempty" json:"storagePath,omitempty"`         // SQLite DB path on PVC for persistence
 	AlgorithmConfig map[string]interface{} `yaml:"algorithmConfig,omitempty" json:"algorithmConfig,omitempty"` // Extra kwargs passed to the Optuna sampler constructor
+}
+
+// EarlyTerminationSpec configures early termination conditions for the trial loop.
+type EarlyTerminationSpec struct {
+	// MaxConsecutiveSLAFailures stops the template's trial loop if the last N
+	// consecutive trials all failed SLA constraints.
+	MaxConsecutiveSLAFailures int `yaml:"maxConsecutiveSLAFailures,omitempty" json:"maxConsecutiveSLAFailures,omitempty"`
+
+	// MaxConsecutiveErrors stops the template's trial loop if the last N
+	// consecutive trials all failed with execution errors (build/create/startup/
+	// runtime failures, NOT SLA failures). Unlike SLA failures which may be
+	// caused by suboptimal parameters, consecutive errors typically indicate
+	// broken templates or cluster-level issues. Default: 3.
+	// This check is NOT gated by MinTrials.
+	MaxConsecutiveErrors *int `yaml:"maxConsecutiveErrors,omitempty" json:"maxConsecutiveErrors,omitempty"`
+
+	// MaxSLAFailureRate stops the template's trial loop if the ratio of
+	// SLA-failing trials exceeds this threshold (0, 1].
+	// Recommended to use together with MinTrials to avoid premature termination
+	// caused by early SLA failures when only a few trials have completed.
+	MaxSLAFailureRate float64 `yaml:"maxSLAFailureRate,omitempty" json:"maxSLAFailureRate,omitempty"`
+
+	// MinTrials is the minimum number of completed trials required before
+	// SLA-based early termination conditions are evaluated. Ensures the
+	// experiment always runs at least this many trials regardless of SLA outcomes.
+	// Note: MaxConsecutiveErrors is NOT gated by MinTrials.
+	MinTrials int `yaml:"minTrials,omitempty" json:"minTrials,omitempty"`
 }
 
 // EvaluatorSpec configures the benchmark evaluation tool.

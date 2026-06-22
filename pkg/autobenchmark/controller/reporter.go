@@ -24,8 +24,10 @@ import (
 	"time"
 
 	"go.yaml.in/yaml/v2"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"sigs.k8s.io/rbgs/cli/pkg/autobenchmark/config"
+	"sigs.k8s.io/rbgs/cli/pkg/autobenchmark/lifecycle"
 	abtypes "sigs.k8s.io/rbgs/cli/pkg/autobenchmark/types"
 )
 
@@ -53,6 +55,7 @@ func BuildReport(state *abtypes.ExperimentState) *Report {
 	}
 
 	totalTrials := 0
+	totalEvaluated := 0
 	totalPass := 0
 
 	for _, ts := range state.Templates {
@@ -61,8 +64,12 @@ func BuildReport(state *abtypes.ExperimentState) *Report {
 			BestTrial: ts.BestTrial,
 			NumTrials: len(ts.Trials),
 		}
-		for _, trial := range ts.Trials {
-			if trial.IsSLAFeasible() {
+		for i := range ts.Trials {
+			if IsExecutionError(&ts.Trials[i]) {
+				continue
+			}
+			totalEvaluated++
+			if ts.Trials[i].IsSLAFeasible() {
 				tr.NumSLAPass++
 			}
 		}
@@ -73,9 +80,9 @@ func BuildReport(state *abtypes.ExperimentState) *Report {
 
 	if state.GlobalBest != nil {
 		report.Summary = fmt.Sprintf(
-			"Best result: template=%q, trial=%d, score=%.2f (%d/%d trials passed SLA)",
+			"Best result: template=%q, trial=%d, score=%.2f (%d/%d evaluated trials passed SLA)",
 			state.GlobalBest.TemplateName, state.GlobalBest.TrialIndex,
-			state.GlobalBest.Score, totalPass, totalTrials,
+			state.GlobalBest.Score, totalPass, totalEvaluated,
 		)
 	} else {
 		report.Summary = fmt.Sprintf(
@@ -186,9 +193,10 @@ type ResultSearchSpace map[string]map[string]SearchParamDetail
 
 // TemplateDetail holds all trial results for a single template.
 type TemplateDetail struct {
-	Name      string                `json:"name"`
-	BestTrial *abtypes.TrialResult  `json:"bestTrial,omitempty"`
-	Trials    []abtypes.TrialResult `json:"trials"`
+	Name              string                `json:"name"`
+	BestTrial         *abtypes.TrialResult  `json:"bestTrial,omitempty"`
+	Trials            []abtypes.TrialResult `json:"trials"`
+	TerminationReason string                `json:"terminationReason,omitempty"`
 }
 
 // BuildResult builds a full ResultDetail from experiment state and config.
@@ -208,8 +216,11 @@ func BuildResult(state *abtypes.ExperimentState, cfg *config.AutoBenchmarkConfig
 
 	for _, ts := range state.Templates {
 		result.Status.TotalTrials += len(ts.Trials)
-		for _, trial := range ts.Trials {
-			if trial.IsSLAFeasible() {
+		for i := range ts.Trials {
+			if IsExecutionError(&ts.Trials[i]) {
+				continue
+			}
+			if ts.Trials[i].IsSLAFeasible() {
 				result.Status.NumSLAPass++
 			} else {
 				result.Status.NumSLAFail++
@@ -253,9 +264,10 @@ func BuildResult(state *abtypes.ExperimentState, cfg *config.AutoBenchmarkConfig
 	// Templates
 	for _, ts := range state.Templates {
 		td := TemplateDetail{
-			Name:      ts.Name,
-			BestTrial: ts.BestTrial,
-			Trials:    ts.Trials,
+			Name:              ts.Name,
+			BestTrial:         ts.BestTrial,
+			Trials:            ts.Trials,
+			TerminationReason: ts.TerminationReason,
 		}
 		result.Templates = append(result.Templates, td)
 	}
@@ -273,4 +285,39 @@ func WriteResultJSON(dir string, result *ResultDetail) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "result.json"), data, 0644)
+}
+
+// writeBestTrialYAML reconstructs the best trial's RBG and writes it as YAML.
+func (ctrl *Controller) writeBestTrialYAML(best *abtypes.TrialResult) error {
+	var tmplPath string
+	for _, t := range ctrl.cfg.Templates {
+		if t.Name == best.TemplateName {
+			tmplPath = t.Template
+			break
+		}
+	}
+	if tmplPath == "" {
+		return fmt.Errorf("template %q not found in config", best.TemplateName)
+	}
+
+	baseRBG, err := lifecycle.LoadTemplate(tmplPath)
+	if err != nil {
+		return fmt.Errorf("loading template %q: %w", best.TemplateName, err)
+	}
+
+	trialRBG, err := ctrl.builder.BuildTrial(baseRBG, best.TrialIndex, best.Params)
+	if err != nil {
+		return fmt.Errorf("building best trial RBG: %w", err)
+	}
+
+	data, err := sigsyaml.Marshal(trialRBG)
+	if err != nil {
+		return fmt.Errorf("marshaling best trial RBG: %w", err)
+	}
+
+	outPath := filepath.Join(ctrl.reportDir, "best_trial.yaml")
+	if err := os.WriteFile(outPath, data, 0644); err != nil {
+		return fmt.Errorf("writing best trial YAML: %w", err)
+	}
+	return nil
 }

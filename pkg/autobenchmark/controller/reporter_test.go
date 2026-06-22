@@ -117,7 +117,7 @@ func TestBuildReport(t *testing.T) {
 		assert.Equal(t, 1, report.Templates[1].NumTrials)
 		assert.Equal(t, 1, report.Templates[1].NumSLAPass)
 		assert.Contains(t, report.Summary, "Best result")
-		assert.Contains(t, report.Summary, "2/3 trials passed SLA")
+		assert.Contains(t, report.Summary, "2/3 evaluated trials passed SLA")
 	})
 
 	t.Run("no SLA pass", func(t *testing.T) {

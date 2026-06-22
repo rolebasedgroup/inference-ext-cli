@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -30,6 +31,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -94,13 +96,13 @@ func main() {
 		namespace = strings.TrimSpace(string(data))
 	}
 
-	if err := run(configPath, namespace, dataDir); err != nil {
+	if err := run(configPath, namespace, dataDir, &opts); err != nil {
 		setupLog.Error(err, "Auto-benchmark failed")
 		os.Exit(1)
 	}
 }
 
-func run(configPath, namespace, dataDir string) error {
+func run(configPath, namespace, dataDir string, zapOpts *zap.Options) error {
 	cfg, err := config.ParseFile(configPath)
 	if err != nil {
 		return fmt.Errorf("parsing config %q: %w", configPath, err)
@@ -114,6 +116,23 @@ func run(configPath, namespace, dataDir string) error {
 	stateDir := filepath.Join(expDir, "state")
 	reportDir := expDir
 
+	// Set up file-based logging: write to both stderr and {expDir}/controller.log.
+	// NOTE: ctrl.SetLogger uses a fulfill-once pattern — the second call is a no-op.
+	// Instead we create a new logger and inject it via context.
+	if err := os.MkdirAll(expDir, 0755); err != nil {
+		return fmt.Errorf("creating experiment dir: %w", err)
+	}
+	logFile, err := os.OpenFile(filepath.Join(expDir, "controller.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("creating controller log file: %w", err)
+	}
+	defer func() { _ = logFile.Close() }()
+
+	fileLogger := zap.New(
+		zap.UseFlagOptions(zapOpts),
+		zap.WriteTo(io.MultiWriter(os.Stderr, logFile)),
+	)
+
 	restCfg, err := ctrl.GetConfig()
 	if err != nil {
 		return fmt.Errorf("getting kubeconfig: %w", err)
@@ -124,7 +143,12 @@ func run(configPath, namespace, dataDir string) error {
 		return fmt.Errorf("creating kubernetes client: %w", err)
 	}
 
-	controller, err := abcontroller.NewController(cfg, k8sClient, namespace, stateDir, reportDir)
+	clientset, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return fmt.Errorf("creating kubernetes clientset: %w", err)
+	}
+
+	controller, err := abcontroller.NewController(cfg, k8sClient, clientset, namespace, stateDir, reportDir)
 	if err != nil {
 		return fmt.Errorf("creating controller: %w", err)
 	}
@@ -132,7 +156,7 @@ func run(configPath, namespace, dataDir string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger := ctrl.Log.WithName("autobenchmark")
+	logger := fileLogger.WithName("autobenchmark")
 	ctx = log.IntoContext(ctx, logger)
 
 	sigCh := make(chan os.Signal, 1)

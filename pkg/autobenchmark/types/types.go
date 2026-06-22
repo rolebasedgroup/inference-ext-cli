@@ -41,8 +41,12 @@ type TrialResult struct {
 	EndTime      time.Time    `json:"endTime"`
 }
 
-// IsSLAFeasible returns true when all SLA constraints are satisfied (all ≤ 0).
+// IsSLAFeasible returns true when the trial completed without error and all
+// SLA constraints are satisfied (all ≤ 0).
 func (t *TrialResult) IsSLAFeasible() bool {
+	if t.Error != "" {
+		return false
+	}
 	for _, c := range t.Constraints {
 		if c > 0 {
 			return false
@@ -74,11 +78,12 @@ type Metrics struct {
 
 // TemplateState tracks the progress of trials for a single template.
 type TemplateState struct {
-	Name           string        `json:"name"`
-	Completed      bool          `json:"completed"`
-	Trials         []TrialResult `json:"trials"`
-	BestTrial      *TrialResult  `json:"bestTrial,omitempty"`
-	AlgorithmState []byte        `json:"algorithmState,omitempty"`
+	Name              string        `json:"name"`
+	Completed         bool          `json:"completed"`
+	Trials            []TrialResult `json:"trials"`
+	BestTrial         *TrialResult  `json:"bestTrial,omitempty"`
+	AlgorithmState    []byte        `json:"algorithmState,omitempty"`
+	TerminationReason string        `json:"terminationReason,omitempty"`
 }
 
 // ExperimentState is the full checkpoint state persisted to PVC.
