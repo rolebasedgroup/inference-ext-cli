@@ -383,7 +383,7 @@ llmctl benchmark run RBG_NAME [flags]
 | `--model-tokenizer` | | Tokenizer to use (HuggingFace model name or PVC path) | (required) |
 | `--experiment-base-dir` | | Base directory for storing experiment results (PVC path) | (required) |
 | `--experiment-folder-name` | | Name of the folder to save experiment results | (job name) |
-| `--image` | | Container image used for benchmark job | `rolebasedgroup/rbgs-benchmark-tool-genai:v0.1.0` |
+| `--image` | | Container image used for benchmark job | `rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-benchmark-tool-genai:v0.1.0` |
 | `--cpu-request` | | CPU request for benchmark pod | `1` |
 | `--cpu-limit` | | CPU limit for benchmark pod | `2` |
 | `--memory-request` | | Memory request for benchmark pod | `2Gi` |
@@ -488,7 +488,7 @@ llmctl benchmark dashboard [flags]
 |------|-------|-------------|---------|
 | `--port` | | Local port for port-forward | `18888` |
 | `--open-browser` | | Automatically open browser after dashboard is ready | `true` |
-| `--image` | | Container image for the benchmark dashboard | `rolebasedgroup/rbgs-benchmark-dashboard:v0.1.0` |
+| `--image` | | Container image for the benchmark dashboard | `rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-benchmark-dashboard:v0.1.0` |
 
 ### llm config
 
