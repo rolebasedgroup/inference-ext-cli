@@ -89,13 +89,6 @@ The tag push triggers the `release.yml` workflow, which automatically:
 ## Post-Release Verification
 
 - Check the GitHub Release page: 4 platform binaries + checksums
-- Verify Docker Hub images have the correct version tags:
-  ```bash
-  VERSION=$(cat VERSION)
-  docker pull rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-autobenchmark:v${VERSION}
-  docker pull rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-benchmark-dashboard:v${VERSION}
-  docker pull rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-autobenchmark-dashboard:v${VERSION}
-  ```
 - Download and verify CLI binary version (both forms work):
   ```bash
   ./llmctl-darwin-arm64 version

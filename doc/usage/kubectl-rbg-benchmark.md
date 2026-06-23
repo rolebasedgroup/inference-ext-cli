@@ -146,7 +146,7 @@ llmctl benchmark dashboard \
 | `--api-key` | `rbg` | API key for model serving |
 | `--api-model-name` | auto | Model name (defaults to RBG name) |
 | `--experiment-folder-name` | auto | Folder name for results (defaults to job name) |
-| `--image` | `rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-benchmark-tool-genai:v0.1.0` | Container image for benchmark job |
+| `--image` | `rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/rolebasedgroup/rbgs-benchmark-tool-genai:v0.1.0` | Container image for benchmark job |
 | `--cpu-request` | `1` | CPU request |
 | `--cpu-limit` | `2` | CPU limit |
 | `--memory-request` | `2Gi` | Memory request |
@@ -184,7 +184,7 @@ No additional flags. Lists all benchmark jobs sorted by creation time (oldest fi
 | `--experiment-base-dir` | - | PVC path containing experiment results (required) |
 | `--port` | `18888` | Local port for port-forward |
 | `--open-browser` | `true` | Automatically open browser |
-| `--image` | `rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-benchmark-dashboard:v0.1.0` | Container image for benchmark server |
+| `--image` | `rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/rolebasedgroup/rbgs-benchmark-dashboard:v0.1.0` | Container image for benchmark server |
 
 ## PVC Path Format
 
