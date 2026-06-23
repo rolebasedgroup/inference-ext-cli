@@ -22,7 +22,6 @@ Run the following commands to update all hardcoded image tags to the new version
 VERSION=$(cat VERSION)
 sed -i '' "s|rbgs-autobenchmark:.*\"|rbgs-autobenchmark:v${VERSION}\"|" cmd/llmctl/autobenchmark/autobenchmark.go
 sed -i '' "s|rbgs-autobenchmark-dashboard:.*\"|rbgs-autobenchmark-dashboard:v${VERSION}\"|" cmd/llmctl/autobenchmark/dashboard.go
-sed -i '' "s|rbgs-benchmark-tool-genai:.*\"|rbgs-benchmark-tool-genai:v${VERSION}\"|" cmd/llmctl/benchmark/benchmark.go
 sed -i '' "s|rbgs-benchmark-dashboard:.*\"|rbgs-benchmark-dashboard:v${VERSION}\"|" cmd/llmctl/benchmark/dashboard_cmd.go
 ```
 
@@ -32,7 +31,6 @@ sed -i '' "s|rbgs-benchmark-dashboard:.*\"|rbgs-benchmark-dashboard:v${VERSION}\
 VERSION=$(cat VERSION)
 sed -i "s|rbgs-autobenchmark:.*\"|rbgs-autobenchmark:v${VERSION}\"|" cmd/llmctl/autobenchmark/autobenchmark.go
 sed -i "s|rbgs-autobenchmark-dashboard:.*\"|rbgs-autobenchmark-dashboard:v${VERSION}\"|" cmd/llmctl/autobenchmark/dashboard.go
-sed -i "s|rbgs-benchmark-tool-genai:.*\"|rbgs-benchmark-tool-genai:v${VERSION}\"|" cmd/llmctl/benchmark/benchmark.go
 sed -i "s|rbgs-benchmark-dashboard:.*\"|rbgs-benchmark-dashboard:v${VERSION}\"|" cmd/llmctl/benchmark/dashboard_cmd.go
 ```
 

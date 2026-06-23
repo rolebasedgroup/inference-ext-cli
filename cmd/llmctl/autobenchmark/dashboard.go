@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	dashboardImage   = "rolebasedgroup/rbgs-autobenchmark-dashboard:latest"
+	dashboardImage   = "rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-autobenchmark-dashboard:v0.1.0"
 	dashboardPort    = 80
 	defaultLocalPort = 18888
 )
