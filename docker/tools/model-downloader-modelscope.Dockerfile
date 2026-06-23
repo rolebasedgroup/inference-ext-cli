@@ -1,4 +1,4 @@
 FROM python:3.11-slim
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir modelscope==1.37.1
+RUN pip install --no-cache-dir --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ && \
+    pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ modelscope==1.37.1

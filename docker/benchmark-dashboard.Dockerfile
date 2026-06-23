@@ -12,17 +12,11 @@ ENV GOPROXY=${GOPROXY} \
     GOSUMDB=${GOSUMDB}
 
 WORKDIR /workspace
-
-# Copy go mod files first for better caching
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy the source code
-COPY ./ui/benchmark ./dashboard/
+ADD . /workspace
 
 # Build
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -a -o benchmark-dashboard ./dashboard/
+    go build -mod vendor -o benchmark-dashboard ./ui/benchmark/
 
 # Use distroless as minimal base image
 FROM alpine:3.22

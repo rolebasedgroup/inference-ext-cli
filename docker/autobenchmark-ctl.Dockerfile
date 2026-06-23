@@ -14,7 +14,7 @@ ENV GOPROXY=${GOPROXY} \
 WORKDIR /workspace
 ADD . /workspace
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -o autobenchmark ./cmd/autobenchmark/
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -mod vendor -o autobenchmark ./cmd/autobenchmark/
 
 # Final image: Python base with genai-bench + controller binary
 FROM python:3.12.12-slim
@@ -25,8 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install genai-bench, inference-perf, and optuna from PyPI
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir genai-bench inference-perf optuna
+RUN pip install --no-cache-dir --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ && \
+    pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ genai-bench inference-perf optuna
 
 # Copy optuna bridge script
 COPY tools/optuna/optuna_bridge.py /tools/optuna_bridge.py
