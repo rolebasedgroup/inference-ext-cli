@@ -27,7 +27,7 @@ func init() {
 	})
 }
 
-const DefaultHuggingFaceImage = "rolebasedgroup/model-downloader-huggingface:v0.0.1"
+const DefaultHuggingFaceImage = "rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/model-downloader-huggingface:v0.1.0"
 
 // HuggingFaceSource implements the SourcePlugin interface for HuggingFace
 type HuggingFaceSource struct {

@@ -12,47 +12,17 @@ Edit the `VERSION` file in the repository root to the new version number (bare s
 echo "<NEW_VERSION>" > VERSION
 ```
 
-### Step 2: Update Default Image Tags in CLI
-
-Run the following commands to update all hardcoded image tags to the new version:
-
-**macOS:**
-
-```bash
-VERSION=$(cat VERSION)
-sed -i '' "s|rbgs-autobenchmark:.*\"|rbgs-autobenchmark:v${VERSION}\"|" cmd/llmctl/autobenchmark/autobenchmark.go
-sed -i '' "s|rbgs-autobenchmark-dashboard:.*\"|rbgs-autobenchmark-dashboard:v${VERSION}\"|" cmd/llmctl/autobenchmark/dashboard.go
-sed -i '' "s|rbgs-benchmark-tool-genai:.*\"|rbgs-benchmark-tool-genai:v${VERSION}\"|" cmd/llmctl/benchmark/benchmark.go
-sed -i '' "s|rbgs-benchmark-dashboard:.*\"|rbgs-benchmark-dashboard:v${VERSION}\"|" cmd/llmctl/benchmark/dashboard_cmd.go
-```
-
-**Linux:**
-
-```bash
-VERSION=$(cat VERSION)
-sed -i "s|rbgs-autobenchmark:.*\"|rbgs-autobenchmark:v${VERSION}\"|" cmd/llmctl/autobenchmark/autobenchmark.go
-sed -i "s|rbgs-autobenchmark-dashboard:.*\"|rbgs-autobenchmark-dashboard:v${VERSION}\"|" cmd/llmctl/autobenchmark/dashboard.go
-sed -i "s|rbgs-benchmark-tool-genai:.*\"|rbgs-benchmark-tool-genai:v${VERSION}\"|" cmd/llmctl/benchmark/benchmark.go
-sed -i "s|rbgs-benchmark-dashboard:.*\"|rbgs-benchmark-dashboard:v${VERSION}\"|" cmd/llmctl/benchmark/dashboard_cmd.go
-```
-
-Verify the changes:
-
-```bash
-grep -n 'Image.*=.*"rolebasedgroup/' cmd/llmctl/autobenchmark/autobenchmark.go cmd/llmctl/autobenchmark/dashboard.go cmd/llmctl/benchmark/benchmark.go cmd/llmctl/benchmark/dashboard_cmd.go
-```
-
-### Step 3: Generate Changelog
+### Step 2: Generate Changelog
 
 The changelog script uses GitHub CLI (`gh`) to collect merged PRs since the last tag and generates entries in the following format:
 
 ```markdown
-## [v0.8.0](https://github.com/rolebasedgroup/inference-ext-cli/tree/v0.8.0) (2026-05-15)
+## [v0.8.0](https://github.com/rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/inference-ext-cli/tree/v0.8.0) (2026-05-15)
 
-- feat: add auto-benchmark SLA evaluation ([#42](https://github.com/rolebasedgroup/inference-ext-cli/pull/42) by [@author](https://github.com/author))
-- fix: resolve dashboard loading issue ([#43](https://github.com/rolebasedgroup/inference-ext-cli/pull/43) by [@author](https://github.com/author))
+- feat: add auto-benchmark SLA evaluation ([#42](https://github.com/rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/inference-ext-cli/pull/42) by [@author](https://github.com/author))
+- fix: resolve dashboard loading issue ([#43](https://github.com/rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/inference-ext-cli/pull/43) by [@author](https://github.com/author))
 
-[Full Changelog](https://github.com/rolebasedgroup/inference-ext-cli/compare/v0.7.0...v0.8.0)
+[Full Changelog](https://github.com/rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/inference-ext-cli/compare/v0.7.0...v0.8.0)
 ```
 
 Run the script:
@@ -64,7 +34,7 @@ Run the script:
 If working from a fork, use `--repo` to specify the upstream repository:
 
 ```bash
-./tools/changelog.sh --repo rolebasedgroup/inference-ext-cli
+./tools/changelog.sh --repo rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/inference-ext-cli
 ```
 
 Review and edit the generated content:
@@ -75,7 +45,7 @@ vim CHANGELOG.md
 
 After generation, group PRs into categories (Features, Bug fixes, Misc, etc.) and remove irrelevant entries before committing.
 
-### Step 4: Commit and Submit PR
+### Step 3: Commit and Submit PR
 
 ```bash
 VERSION=$(cat VERSION)
@@ -90,7 +60,7 @@ Wait for all checks to pass, then merge.
 
 ## Release Process
 
-### Step 5: Create and Push Tag
+### Step 4: Create and Push Tag
 
 ```bash
 VERSION=$(cat VERSION)
@@ -99,7 +69,7 @@ git tag v${VERSION}
 git push origin v${VERSION}
 ```
 
-### Step 6: Wait for CI
+### Step 5: Wait for CI
 
 The tag push triggers the `release.yml` workflow, which automatically:
 
@@ -108,7 +78,7 @@ The tag push triggers the `release.yml` workflow, which automatically:
 3. **Builds and pushes Docker images** (3 images, multi-arch amd64+arm64) to Docker Hub
 4. **Creates a Draft Release** on GitHub with CLI binaries and release notes from CHANGELOG.md
 
-### Step 7: Review and Publish Release
+### Step 6: Review and Publish Release
 
 1. Go to the GitHub Releases page
 2. Find the draft release created by CI
@@ -122,9 +92,9 @@ The tag push triggers the `release.yml` workflow, which automatically:
 - Verify Docker Hub images have the correct version tags:
   ```bash
   VERSION=$(cat VERSION)
-  docker pull rolebasedgroup/rbgs-autobenchmark:v${VERSION}
-  docker pull rolebasedgroup/rbgs-benchmark-dashboard:v${VERSION}
-  docker pull rolebasedgroup/rbgs-autobenchmark-dashboard:v${VERSION}
+  docker pull rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-autobenchmark:v${VERSION}
+  docker pull rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-benchmark-dashboard:v${VERSION}
+  docker pull rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-autobenchmark-dashboard:v${VERSION}
   ```
 - Download and verify CLI binary version (both forms work):
   ```bash

@@ -27,7 +27,7 @@ func init() {
 	})
 }
 
-const DefaultModelScopeImage = "rolebasedgroup/model-downloader-modelscope:v0.0.1"
+const DefaultModelScopeImage = "rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/model-downloader-modelscope:v0.1.0"
 
 // ModelScopeSource implements the SourcePlugin interface for ModelScope
 type ModelScopeSource struct {

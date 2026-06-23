@@ -137,68 +137,9 @@ jobs:
             llmctl-${{ matrix.goos }}-${{ matrix.goarch }}
             llmctl-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
 
-  build-images:
-    name: Build Docker Images
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_SECRET }}
-
-      - name: Build and push autobenchmark controller
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/autobenchmark-ctl.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/rbgs-autobenchmark:${{ needs.validate.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/rbgs-autobenchmark:${{ needs.validate.outputs.version }}-${{ needs.validate.outputs.short_sha }}
-            ${{ needs.validate.outputs.is_latest == 'true' && format('{0}/rbgs-autobenchmark:latest', secrets.DOCKERHUB_USERNAME) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push benchmark dashboard
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/benchmark-dashboard.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/rbgs-benchmark-dashboard:${{ needs.validate.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/rbgs-benchmark-dashboard:${{ needs.validate.outputs.version }}-${{ needs.validate.outputs.short_sha }}
-            ${{ needs.validate.outputs.is_latest == 'true' && format('{0}/rbgs-benchmark-dashboard:latest', secrets.DOCKERHUB_USERNAME) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push autobenchmark dashboard
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/autobenchmark-dashboard.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/rbgs-autobenchmark-dashboard:${{ needs.validate.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/rbgs-autobenchmark-dashboard:${{ needs.validate.outputs.version }}-${{ needs.validate.outputs.short_sha }}
-            ${{ needs.validate.outputs.is_latest == 'true' && format('{0}/rbgs-autobenchmark-dashboard:latest', secrets.DOCKERHUB_USERNAME) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   create-release:
     name: Create Draft Release
-    needs: [validate, build-cli, build-images]
+    needs: [validate, build-cli]
     permissions:
       contents: write
     runs-on: ubuntu-latest
