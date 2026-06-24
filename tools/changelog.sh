@@ -110,7 +110,7 @@ get_merged_prs() {
         --repo "${REPO_SLUG}"
         --limit 200
         --json number,title,author,url,mergedAt
-        --jq 'sort_by(.mergedAt) | reverse | .[] | "- \(.title) ([#\(.number)](\(.url)) by [@\(.author.login)](https://github.com/\(.author.login)))"'
+        --jq 'sort_by(.mergedAt) | .[] | "- \(.title) ([#\(.number)](\(.url)) by [@\(.author.login)](https://github.com/\(.author.login)))"'
     )
     if [ -n "${since_date}" ]; then
         args+=(--search "is:pr is:merged merged:>${since_date}")
