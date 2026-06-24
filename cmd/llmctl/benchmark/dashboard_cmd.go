@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	defaultDashboardImage   = "rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/dev/rbgs-benchmark-dashboard:v0.1.0"
+	defaultDashboardImage   = "rolebasedgroup-registry.cn-beijing.cr.aliyuncs.com/rolebasedgroup/rbgs-benchmark-dashboard:v0.1.0"
 	defaultDashboardPort    = 8080
 	defaultLocalPort        = 18888
 	dashboardLabelKey       = "rbg-benchmark-dashboard-app"

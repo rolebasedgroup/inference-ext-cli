@@ -14,7 +14,7 @@ ENV GOPROXY=${GOPROXY} \
 WORKDIR /workspace
 ADD . /workspace
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -o autobenchmark ./cmd/autobenchmark/
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -mod vendor -o autobenchmark ./cmd/autobenchmark/
 
 # Final image: Python base with genai-bench + controller binary
 FROM python:3.12.12-slim
