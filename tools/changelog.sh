@@ -106,6 +106,8 @@ get_merged_prs() {
 
     # gh pr list with --search overrides the --state filter, so build a single
     # search query that covers both is:merged and merged:>... when applicable.
+    # Sort PRs chronologically (oldest first, newest last) within each version.
+    # Do NOT add `| reverse` — the convention is ascending mergedAt order.
     local args=(
         --repo "${REPO_SLUG}"
         --limit 200
@@ -171,6 +173,12 @@ if [ -n "${COMPARE_URL}" ]; then
 fi
 
 # Insert the new section into CHANGELOG.md
+#
+# Ordering convention:
+#   - Versions: newest at top, oldest at bottom (reverse chronological)
+#   - PRs within each version: oldest at top, newest at bottom (chronological)
+#
+# So we PREPEND the new version section before the first existing "## " heading.
 if [ -f "${CHANGELOG_FILE}" ]; then
     # Check if this version already exists. -F (fixed-string) avoids the dots in
     # vX.Y.Z being interpreted as regex metacharacters.
